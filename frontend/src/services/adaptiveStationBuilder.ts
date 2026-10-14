@@ -1,4 +1,5 @@
 import { LearningNode } from './roadmapCatalog';
+import { getAlternateQuestionsForStation, distributeOptionsAndAnswers } from './stationQuestionBank';
 
 export interface StationBuilderOptions {
   goal: string;
@@ -1621,11 +1622,27 @@ export function buildAdaptiveStations(options: StationBuilderOptions): LearningN
       stageName += 'Tổng Ôn Thực Chiến Cán Đích';
     }
 
+    // Đảm bảo mỗi trạm luôn có ít nhất 3 câu thực hành và ít nhất 5 câu kiểm tra cuối trạm (Mastery Test)
+    let practice = node.practiceQuestions || [];
+    let mastery = node.masteryTest || [];
+
+    if (mastery.length < 5 || practice.length < 3) {
+      const qBank = getAlternateQuestionsForStation({ ...node, stationNumber: idx + 1 }, idx);
+      if (practice.length < 3) {
+        practice = qBank.practiceQuestions;
+      }
+      if (mastery.length < 5) {
+        mastery = qBank.masteryTest;
+      }
+    }
+
     return {
       ...node,
       stationNumber: idx + 1,
       stageId: currentStageId,
       stageName,
+      practiceQuestions: distributeOptionsAndAnswers(practice),
+      masteryTest: distributeOptionsAndAnswers(mastery),
       status: idx === 0 ? ('active' as const) : ('locked' as const)
     };
   });

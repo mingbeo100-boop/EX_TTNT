@@ -12,7 +12,8 @@ import {
 } from '../services/roadmapCatalog';
 import {
   getAlternateQuestionsForStation,
-  generateLiveStationQuestionsWithAi
+  generateLiveStationQuestionsWithAi,
+  distributeOptionsAndAnswers
 } from '../services/stationQuestionBank';
 import {
   Sparkles,
@@ -293,7 +294,22 @@ export const RoadmapPage: React.FC<RoadmapPageProps> = ({ onNavigate }) => {
       showToast('🔒 Hãy hoàn thành các trạm trước để mở khóa trạm này!');
       return;
     }
-    setActiveNode(node);
+
+    // Đảm bảo trạm mở ra luôn có ít nhất 3 câu thực hành và ít nhất 5 câu kiểm tra cuối trạm (Mastery Test)
+    let safeNode = { ...node };
+    if (!safeNode.masteryTest || safeNode.masteryTest.length < 5 || !safeNode.practiceQuestions || safeNode.practiceQuestions.length < 3) {
+      const alt = getAlternateQuestionsForStation(safeNode, 0);
+      if (!safeNode.practiceQuestions || safeNode.practiceQuestions.length < 3) {
+        safeNode.practiceQuestions = alt.practiceQuestions;
+      }
+      if (!safeNode.masteryTest || safeNode.masteryTest.length < 5) {
+        safeNode.masteryTest = alt.masteryTest;
+      }
+    }
+    safeNode.practiceQuestions = distributeOptionsAndAnswers(safeNode.practiceQuestions);
+    safeNode.masteryTest = distributeOptionsAndAnswers(safeNode.masteryTest);
+
+    setActiveNode(safeNode);
     setActiveTab('objectives');
     setQuestionSetIndex(0);
     setCurrentQuestionSetName('Bộ Đề Chuẩn Hóa 01');
@@ -302,14 +318,14 @@ export const RoadmapPage: React.FC<RoadmapPageProps> = ({ onNavigate }) => {
 
     // Reset practice
     setPracticeIndex(0);
-    setPracticeAnswers(new Array(node.practiceQuestions.length).fill(null));
-    setPracticeChecked(new Array(node.practiceQuestions.length).fill(false));
+    setPracticeAnswers(new Array(safeNode.practiceQuestions.length).fill(null));
+    setPracticeChecked(new Array(safeNode.practiceQuestions.length).fill(false));
     setRevealedHintsCount(0);
 
     // Reset mastery
     setMasteryIndex(0);
-    setMasteryAnswers(new Array(node.masteryTest.length).fill(null));
-    setMasteryChecked(new Array(node.masteryTest.length).fill(false));
+    setMasteryAnswers(new Array(safeNode.masteryTest.length).fill(null));
+    setMasteryChecked(new Array(safeNode.masteryTest.length).fill(false));
     setMasteryCorrectCount(0);
     setMasteryFinished(false);
   };
@@ -432,40 +448,48 @@ export const RoadmapPage: React.FC<RoadmapPageProps> = ({ onNavigate }) => {
   const handleSwapQuestions = async () => {
     if (!activeNode || isSwappingQuestions) return;
     setIsSwappingQuestions(true);
-    showToast('✨ AI đang phân tích dạng bài & thiết kế bộ câu hỏi test mới...');
+    showToast(`✨ Gemini AI đang phân tích bài học & thiết kế bộ 5+ câu hỏi độc bản cho Trạm 0${activeNode.stationNumber}...`);
     try {
       const nextSetIndex = questionSetIndex + 1;
       let newQuestions = await generateLiveStationQuestionsWithAi(activeNode, activeNode.difficulty);
       let isAiGenerated = true;
-      if (!newQuestions) {
+      if (!newQuestions || newQuestions.masteryTest.length < 5) {
         newQuestions = getAlternateQuestionsForStation(activeNode, nextSetIndex);
         isAiGenerated = false;
       }
 
+      // Đảm bảo đáp án đúng luôn được phân bổ đa dạng (A, B, C, D)
+      const distributedPractice = distributeOptionsAndAnswers(newQuestions.practiceQuestions);
+      const distributedMastery = distributeOptionsAndAnswers(newQuestions.masteryTest);
+
       const updatedNode: LearningNode = {
         ...activeNode,
-        practiceQuestions: newQuestions.practiceQuestions,
-        masteryTest: newQuestions.masteryTest
+        practiceQuestions: distributedPractice,
+        masteryTest: distributedMastery
       };
 
       setActiveNode(updatedNode);
       setQuestionSetIndex(nextSetIndex);
-      setCurrentQuestionSetName(isAiGenerated ? `Bộ Đề Live Gemini #${nextSetIndex + 1}` : `Bộ Đề Thích Ứng #${nextSetIndex + 1}`);
+      setCurrentQuestionSetName(isAiGenerated ? `Bộ Đề Gemini Live #${nextSetIndex + 1}` : `Bộ Đề Thích Ứng #${nextSetIndex + 1}`);
+
+      // Đồng bộ vào danh sách nodes & lưu trữ để không bị mất câu hỏi mới sinh
+      const updatedNodes = nodes.map(n => n.id === updatedNode.id ? updatedNode : n);
+      saveNodes(updatedNodes);
 
       // Reset practice
       setPracticeIndex(0);
-      setPracticeAnswers(new Array(newQuestions.practiceQuestions.length).fill(null));
-      setPracticeChecked(new Array(newQuestions.practiceQuestions.length).fill(false));
+      setPracticeAnswers(new Array(distributedPractice.length).fill(null));
+      setPracticeChecked(new Array(distributedPractice.length).fill(false));
       setRevealedHintsCount(0);
 
       // Reset mastery
       setMasteryIndex(0);
-      setMasteryAnswers(new Array(newQuestions.masteryTest.length).fill(null));
-      setMasteryChecked(new Array(newQuestions.masteryTest.length).fill(false));
+      setMasteryAnswers(new Array(distributedMastery.length).fill(null));
+      setMasteryChecked(new Array(distributedMastery.length).fill(false));
       setMasteryCorrectCount(0);
       setMasteryFinished(false);
 
-      showToast(`🎯 Đã đổi sang ${newQuestions.practiceQuestions.length} câu thực hành & ${newQuestions.masteryTest.length} câu test mới!`);
+      showToast(`🎯 Gemini đã sinh thành công ${distributedPractice.length} câu thực hành & ${distributedMastery.length} câu kiểm tra chuẩn đầu ra!`);
     } catch (err) {
       console.error(err);
       showToast('Đã có lỗi khi đổi bộ câu hỏi.');

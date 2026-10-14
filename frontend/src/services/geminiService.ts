@@ -16,7 +16,7 @@ export const geminiService = {
   getApiKey(): string {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved && saved.trim()) return saved.trim();
+      if (saved && saved.trim() && saved.trim().length > 15) return saved.trim();
     } catch {}
     const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
     if (envKey && envKey.trim()) return envKey.trim();
@@ -65,7 +65,7 @@ export const geminiService = {
     attachedImageBase64?: string | null;
     timeoutMs?: number;
   }): Promise<{ text: string; isRealGemini: boolean; error?: string }> {
-    const { prompt, conversationHistory = [], subject = 'Toán học', attachedImageBase64, timeoutMs = 15000 } = params;
+    const { prompt, conversationHistory = [], subject = 'Toán học', attachedImageBase64, timeoutMs = 25000 } = params;
     const apiKey = this.getApiKey();
 
     const systemInstructionText = `Bạn là EduAdvisor AI - Trợ lý trí tuệ nhân tạo và Cố vấn học tập thông minh.
@@ -85,10 +85,11 @@ Quy tắc trả lời:
       const modelsToTry = [
         selected || 'gemini-3.5-flash-lite',
         'gemini-3.5-flash-lite',
-        'gemini-3.5-flash',
-        'gemini-3.6-flash'
+        'gemini-flash-lite-latest',
+        'gemini-3-flash-preview',
+        'gemma-4-26b-a4b-it'
       ];
-      const uniqueModels = Array.from(new Set(modelsToTry)).slice(0, 3);
+      const uniqueModels = Array.from(new Set(modelsToTry)).slice(0, 4);
 
       for (const model of uniqueModels) {
         const controller = new AbortController();
