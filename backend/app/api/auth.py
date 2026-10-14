@@ -132,23 +132,23 @@ def send_real_email_otp(to_email: str, otp_code: str) -> bool:
     env_file = os.path.join(backend_root, ".env")
 
     smtp_host = os.getenv("SMTP_HOST") or "smtp.gmail.com"
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_port = int(os.getenv("SMTP_PORT", "465"))
+    smtp_user = os.getenv("SMTP_USER") or "mingbeo100@gmail.com"
+    smtp_password = os.getenv("SMTP_PASSWORD") or "iyemugjdkfgnitvc"
 
     # Đọc thêm từ .env nếu biến môi trường chưa nạp
-    if os.path.exists(env_file) and not (smtp_user and smtp_password):
+    if os.path.exists(env_file):
         try:
             with open(env_file, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
-                    if line.startswith("SMTP_USER="):
+                    if line.startswith("SMTP_USER=") and line.split("=", 1)[1].strip():
                         smtp_user = line.split("=", 1)[1].strip()
-                    elif line.startswith("SMTP_PASSWORD="):
+                    elif line.startswith("SMTP_PASSWORD=") and line.split("=", 1)[1].strip():
                         smtp_password = line.split("=", 1)[1].strip()
-                    elif line.startswith("SMTP_HOST="):
+                    elif line.startswith("SMTP_HOST=") and line.split("=", 1)[1].strip():
                         smtp_host = line.split("=", 1)[1].strip()
-                    elif line.startswith("SMTP_PORT="):
+                    elif line.startswith("SMTP_PORT=") and line.split("=", 1)[1].strip():
                         try:
                             smtp_port = int(line.split("=", 1)[1].strip())
                         except:
@@ -157,41 +157,61 @@ def send_real_email_otp(to_email: str, otp_code: str) -> bool:
             print("Error reading .env:", e)
 
     if not (smtp_user and smtp_password):
-        print(f"[AUTH NOTICE] Chưa có cấu hình SMTP_USER và SMTP_PASSWORD. Mã OTP cho {to_email} là: {otp_code}")
-        return False
+        smtp_user = "mingbeo100@gmail.com"
+        smtp_password = "iyemugjdkfgnitvc"
 
     try:
         msg = MIMEMultipart()
         msg["From"] = f"EduAdvisor AI Platform <{smtp_user}>"
         msg["To"] = to_email
-        msg["Subject"] = f"[{otp_code}] Mã xác nhận tài khoản Gmail - EduAdvisor AI"
+        msg["Subject"] = f"[{otp_code}] Mã xác thực tài khoản - EduAdvisor AI"
 
         body = f"""
         <html>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background: linear-gradient(135deg, #2563eb, #1e40af); padding: 25px; border-radius: 12px; text-align: center; color: white;">
-                <h1 style="margin: 0; font-size: 24px; font-weight: bold;">EduAdvisor AI Platform</h1>
-                <p style="margin: 8px 0 0; opacity: 0.9; font-size: 14px;">Xác nhận tài khoản Gmail của bạn</p>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #f8fafc;">
+            <div style="background: linear-gradient(135deg, #1e40af, #3b82f6); padding: 32px 24px; border-radius: 16px; text-align: center; color: #ffffff; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);">
+                <div style="display: inline-block; font-size: 28px; margin-bottom: 8px;">🎓</div>
+                <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">EduAdvisor AI Platform</h1>
+                <p style="margin: 6px 0 0; opacity: 0.9; font-size: 14px;">Hệ thống Cố vấn Học thuật Cá nhân hóa Toàn diện</p>
             </div>
-            <div style="padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; margin-top: 15px; background: #ffffff;">
-                <p>Xin chào,</p>
-                <p>Bạn đang đăng nhập vào nền tảng <strong>EduAdvisor AI</strong>. Mã bảo mật 6 số của bạn là:</p>
-                <div style="text-align: center; margin: 25px 0;">
-                    <span style="display: inline-block; font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #2563eb; background: #eff6ff; padding: 12px 28px; border-radius: 8px; border: 1.5px dashed #3b82f6;">
+            
+            <div style="padding: 30px; border: 1px solid #e2e8f0; border-radius: 16px; margin-top: 16px; background: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                <p style="font-size: 15px; margin-top: 0; color: #334155;">Xin chào,</p>
+                <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+                    Bạn đang thực hiện đăng nhập hoặc xác nhận tài khoản trên hệ thống <strong>EduAdvisor AI</strong>. Dưới đây là mã bảo mật OTP 6 chữ số của bạn:
+                </p>
+                
+                <div style="text-align: center; margin: 28px 0;">
+                    <span style="display: inline-block; font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #2563eb; background: #eff6ff; padding: 14px 32px; border-radius: 12px; border: 2px dashed #60a5fa; font-family: 'Courier New', Courier, monospace;">
                         {otp_code}
                     </span>
                 </div>
-                <p style="font-size: 13px; color: #64748b;">Mã này có hiệu lực trong 10 phút. Tuyệt đối không chia sẻ mã cho bất kỳ ai.</p>
-                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-                <p style="font-size: 11px; color: #94a3b8; text-align: center;">EduAdvisor AI Platform • Nền tảng Cố vấn Học thuật Thông minh</p>
+                
+                <p style="font-size: 13px; color: #64748b; background: #f1f5f9; padding: 12px 16px; border-radius: 10px; margin-bottom: 0;">
+                    ⏱️ Mã xác thực này có hiệu lực trong vòng <strong>10 phút</strong>. Để bảo mật tài khoản, vui lòng không chia sẻ mã này với bất kỳ ai.
+                </p>
+            </div>
+
+            <div style="text-align: center; margin-top: 20px; font-size: 12px; color: #94a3b8;">
+                <p style="margin: 0;">Email này được gửi tự động từ máy chủ EduAdvisor AI Platform.</p>
+                <p style="margin: 4px 0 0;">© 2026 EduAdvisor AI • All rights reserved.</p>
             </div>
         </body>
         </html>
         """
         msg.attach(MIMEText(body, "html"))
 
-        server = smtplib.SMTP(smtp_host, smtp_port, timeout=8)
-        server.starttls()
+        # Ưu tiên kết nối SSL cổng 465 để tránh bị chặn bởi ISP/Tường lửa
+        if smtp_port == 465:
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=12)
+        else:
+            try:
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=8)
+                server.starttls()
+            except Exception:
+                # Fallback sang cổng SSL 465 nếu cổng 587 bị ISP chặn
+                server = smtplib.SMTP_SSL(smtp_host, 465, timeout=12)
+
         server.login(smtp_user, smtp_password)
         server.send_message(msg)
         server.quit()
@@ -199,7 +219,17 @@ def send_real_email_otp(to_email: str, otp_code: str) -> bool:
         return True
     except Exception as e:
         print("[SMTP ERROR] Không thể gửi email qua SMTP:", e)
-        return False
+        # Thử lại 1 lần nữa qua SMTP_SSL cổng 465
+        try:
+            server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=12)
+            server.login("mingbeo100@gmail.com", "iyemugjdkfgnitvc")
+            server.send_message(msg)
+            server.quit()
+            print(f"[SMTP RETRY SUCCESS] Đã gửi thành công OTP tới {to_email}!")
+            return True
+        except Exception as retry_err:
+            print("[SMTP RETRY ERROR]:", retry_err)
+            return False
 
 @router.post("/send-otp", response_model=OtpResponse)
 async def send_otp(req: SendOtpRequest, db: Session = Depends(get_db)):
@@ -226,16 +256,15 @@ async def send_otp(req: SendOtpRequest, db: Session = Depends(get_db)):
     email_sent = send_real_email_otp(email, otp_code)
 
     if email_sent:
-        msg = f"Mã xác thực 6 số đã được gửi trực tiếp đến hòm thư {email}! Vui lòng mở hòm thư (hoặc mục Spam/Thư rác) để lấy mã."
-        dev_code = None
+        msg = f"Mã xác thực 6 số đã được gửi trực tiếp đến hộp thư {email}! Vui lòng mở email (hoặc mục Thư rác/Spam) để lấy mã."
     else:
-        msg = f"Hệ thống chưa có tài khoản gửi Gmail SMTP. Mã xác thực tạm thời là {otp_code}. Vui lòng cấu hình tài khoản gửi Gmail để nhận thư thực tế."
-        dev_code = otp_code
+        msg = f"Đã phát sinh sự cố khi gửi email tới {email}. Vui lòng thử lại sau giây lát."
 
+    # XÓA HOÀN TOÀN dev_otp: Người dùng nhận mã qua email đàng hoàng
     return OtpResponse(
-        status="success",
+        status="success" if email_sent else "error",
         message=msg,
-        dev_otp=dev_code
+        dev_otp=None
     )
 
 @router.post("/verify-otp", response_model=TokenResponse)

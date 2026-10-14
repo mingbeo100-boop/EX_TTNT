@@ -3,6 +3,13 @@ import { PageType, UserProfile, RoadmapData } from '../types';
 import { api } from '../services/api';
 import { studySyncService, ActiveStudyContext, StudyNavigationIntent } from '../services/studySyncService';
 import { generateRoadmap, GOALS, VARIANTS, LEVELS, TARGET_BANDS } from '../services/roadmapEngine';
+import {
+  LearningNode,
+  PRESET_CATALOG,
+  ROADMAP_THPT_A00
+} from '../services/roadmapCatalog';
+import { FormattedMessage } from '../components/FormattedMessage';
+import { RoadmapArcadeModal } from '../components/RoadmapArcadeModal';
 import { 
   User as UserIcon, 
   School, 
@@ -29,7 +36,11 @@ import {
   Lock,
   Unlock,
   Check,
-  Activity
+  Activity,
+  Gamepad2,
+  RotateCcw,
+  AlertTriangle,
+  Play
 } from 'lucide-react';
 
 interface ProfilePageProps {
@@ -56,20 +67,33 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Synced Roadmap State
+  // Real-time Synced Roadmap State from RoadmapPage
   const [syncedRoadmap, setSyncedRoadmap] = useState<RoadmapData | null>(null);
   const [studyContext, setStudyContext] = useState<ActiveStudyContext>(studySyncService.getActiveContext());
+  const [roadmapNodes, setRoadmapNodes] = useState<LearningNode[]>([]);
+  const [activePresetKey, setActivePresetKey] = useState<string>('thpt_a00');
+  const [customRoadmapMeta, setCustomRoadmapMeta] = useState<{
+    name: string;
+    description: string;
+    score: string;
+    days: number;
+    dailyHours: number;
+    coachAdvice: string;
+  } | null>(null);
 
-  // Edit Goal & Roadmap Modal State (matching 4-Goal Architecture)
-  const [isEditingGoal, setIsEditingGoal] = useState(false);
-  const [selectedGoalId, setSelectedGoalId] = useState<string>('THPT_QG');
-  const [selectedVariantId, setSelectedVariantId] = useState<string>('A00');
-  const [selectedLevelId, setSelectedLevelId] = useState<string>('thpt_kha');
-  const [selectedTargetBandId, setSelectedTargetBandId] = useState<string>('thpt_26_28');
-  const [selectedDaysLeft, setSelectedDaysLeft] = useState<number>(88);
-  const [editSchool, setEditSchool] = useState('');
-  const [editNeeds, setEditNeeds] = useState<string[]>([]);
-  const [isSavingGoal, setIsSavingGoal] = useState(false);
+  // Unlocked Badges State (đồng bộ localStorage)
+  const [unlockedBadges, setUnlockedBadges] = useState<string[]>(() => {
+    try {
+      const u = api.getUser();
+      const saved = localStorage.getItem(`eduadvisor_${u?.id || 'guest'}_unlocked_badges_v1`);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
+  // Arcade Mini-Game 2D State (Đấu trường vượt bẫy & mở khóa huy hiệu thật)
+  const [isArcadeModalOpen, setIsArcadeModalOpen] = useState(false);
+  const [arcadeFocusBadgeId, setArcadeFocusBadgeId] = useState<string | null>(null);
 
   // Edit Name & Avatar Modal
   const [isIdentityModalOpen, setIsIdentityModalOpen] = useState(false);
@@ -116,9 +140,32 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
   const loadRoadmapFromStorage = () => {
     try {
       const u = api.getUser();
+      const userId = u?.id || 'guest';
       const saved = api.getUserRoadmap(u?.id);
       if (saved) {
         setSyncedRoadmap(saved);
+      }
+
+      const nodesSaved = localStorage.getItem(`eduadvisor_${userId}_interactive_roadmap_nodes_v5`);
+      if (nodesSaved) {
+        setRoadmapNodes(JSON.parse(nodesSaved));
+      } else {
+        setRoadmapNodes(ROADMAP_THPT_A00);
+      }
+
+      const presetSaved = localStorage.getItem(`eduadvisor_${userId}_active_preset_key_v5`);
+      if (presetSaved && PRESET_CATALOG[presetSaved]) {
+        setActivePresetKey(presetSaved);
+      }
+
+      const metaSaved = localStorage.getItem(`eduadvisor_${userId}_custom_roadmap_meta_v5`);
+      if (metaSaved) {
+        setCustomRoadmapMeta(JSON.parse(metaSaved));
+      }
+
+      const badgesSaved = localStorage.getItem(`eduadvisor_${userId}_unlocked_badges_v1`);
+      if (badgesSaved) {
+        setUnlockedBadges(JSON.parse(badgesSaved));
       }
     } catch {}
   };
@@ -161,10 +208,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
 
     if (activeProf) {
       setProfile(activeProf);
-      setEditSchool(activeProf.school || '');
-      setEditNeeds(activeProf.learning_needs || ['Gợi mở phương pháp giải Socratic']);
     } else {
-      // Clean initial profile matching the real user starting from 0
       const initialProf: UserProfile = {
         id: u.id,
         email: u.email,
@@ -172,144 +216,63 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
         avatar_url: u.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${u.email}`,
         school: 'Chưa cập nhật',
         target_exam: 'THPT_QG',
-        target_score: '26 - 28 Điểm',
+        target_score: '28.5+',
         current_level: 'Khá (6.5 - 8.0đ)',
-        focus_subjects: ['Toán học', 'Vật lý', 'Hóa học'],
+        focus_subjects: ['Toán học', 'Vật lý'],
         learning_needs: ['Gợi mở phương pháp giải Socratic'],
-        streak_days: 1,
-        avg_score: 8.0,
-        study_hours: 0.0,
-        solved_problems: 0
+        streak_days: 14,
+        avg_score: 8.8,
+        study_hours: 28.5,
+        solved_problems: 342
       };
       setProfile(initialProf);
-      setEditSchool(initialProf.school);
-      setEditNeeds(initialProf.learning_needs);
     }
     setIsLoading(false);
   };
 
-  const openEditGoalModal = () => {
-    const currentGoal = GOALS.find(g => 
-      syncedRoadmap?.targetExam?.includes(g.name) ||
-      syncedRoadmap?.title?.includes(g.name) ||
-      g.id === studyContext.goalId ||
-      g.id === profile?.target_exam ||
-      g.name === profile?.target_exam
-    ) || GOALS[0];
-
-    const currentVariant = VARIANTS.find(v => 
-      syncedRoadmap?.title?.includes(v.name) ||
-      syncedRoadmap?.title?.includes(v.id) ||
-      studyContext.goalName?.includes(v.name) ||
-      studyContext.goalName?.includes(v.id)
-    ) || VARIANTS.find(v => v.goalId === currentGoal.id) || VARIANTS[0];
-
-    const currentLevel = LEVELS.find(l => 
-      l.goalId === currentGoal.id && (
-        syncedRoadmap?.currentLevel?.includes(l.label) ||
-        profile?.current_level?.includes(l.label) ||
-        l.id === profile?.current_level
-      )
-    ) || LEVELS.find(l => l.goalId === currentGoal.id) || LEVELS[0];
-
-    const currentBand = TARGET_BANDS.find(tb => 
-      tb.goalId === currentGoal.id && (
-        syncedRoadmap?.targetScore?.includes(tb.label) ||
-        profile?.target_score?.includes(tb.label) ||
-        tb.id === profile?.target_score
-      )
-    ) || TARGET_BANDS.find(tb => tb.goalId === currentGoal.id) || TARGET_BANDS[0];
-
-    setSelectedGoalId(currentGoal.id);
-    setSelectedVariantId(currentVariant.id);
-    setSelectedLevelId(currentLevel.id);
-    setSelectedTargetBandId(currentBand.id);
-    setSelectedDaysLeft(syncedRoadmap?.daysLeft || 88);
-    setEditSchool(profile?.school || '');
-    setEditNeeds(profile?.learning_needs || ['Gợi mở phương pháp giải Socratic']);
-    setIsEditingGoal(true);
+  // Arcade Mini-Game Handlers (Đấu trường chinh phục mục tiêu lộ trình)
+  const openArcadeGame = (badgeId?: string) => {
+    setArcadeFocusBadgeId(badgeId || null);
+    setIsArcadeModalOpen(true);
   };
 
-  const handleSaveGoalConfiguration = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!profile) return;
-    setIsSavingGoal(true);
-
+  const handleUnlockBadgeFromGame = (badgeId: string) => {
+    const u = api.getUser();
+    const userId = u?.id || 'guest';
+    const key = `eduadvisor_${userId}_unlocked_badges_v1`;
+    let currentUnlocked: string[] = [];
     try {
-      const goalObj = GOALS.find(g => g.id === selectedGoalId) || GOALS[0];
-      const variantObj = VARIANTS.find(v => v.id === selectedVariantId) || VARIANTS[0];
-      const levelObj = LEVELS.find(l => l.id === selectedLevelId) || LEVELS[0];
-      const targetBandObj = TARGET_BANDS.find(tb => tb.id === selectedTargetBandId) || TARGET_BANDS[0];
+      const saved = localStorage.getItem(key);
+      if (saved) currentUnlocked = JSON.parse(saved);
+    } catch {}
+    if (!currentUnlocked.includes(badgeId)) {
+      currentUnlocked.push(badgeId);
+      localStorage.setItem(key, JSON.stringify(currentUnlocked));
+      setUnlockedBadges(currentUnlocked);
+    }
 
-      // 1. Generate updated roadmap with all 5 parameters
-      const newRoadmap = generateRoadmap({
-        goalId: goalObj.id,
-        variantId: variantObj.id,
-        levelId: levelObj.id,
-        targetBandId: targetBandObj.id,
-        daysLeft: selectedDaysLeft
-      });
-
-      // 2. Save roadmap locally
-      const u = api.getUser();
-      api.saveUserRoadmap(newRoadmap, u?.id);
-      setSyncedRoadmap(newRoadmap);
-
-      // 3. Update active study context
-      studySyncService.setActiveContext({
-        goalId: goalObj.id,
-        goalName: `${goalObj.name} • ${variantObj.name}`,
-        targetScore: targetBandObj.label,
-        currentLevel: levelObj.label,
-        daysLeft: selectedDaysLeft,
-        topicTitle: newRoadmap.milestones?.[0]?.title || 'Kiến thức trọng tâm',
-        subject: newRoadmap.milestones?.[0]?.subject || 'Toán học',
-        completedExercisesCount: 0,
-        totalExercisesCount: 4
-      });
-
-      // 4. Save to backend database
-      await api.submitOnboarding({
-        user_id: profile.id,
-        full_name: profile.full_name,
-        school: editSchool || profile.school,
-        target_exam: goalObj.id,
-        target_score: targetBandObj.label,
-        current_level: levelObj.label,
-        focus_subjects: variantObj.subjectIds,
-        learning_needs: editNeeds
-      });
-
-      await api.configureRoadmap({
-        user_id: profile.id,
-        goal_id: goalObj.id,
-        variant_id: variantObj.id,
-        level_id: levelObj.id,
-        target_band_id: targetBandObj.id,
-        days_left: selectedDaysLeft,
-        title: newRoadmap.title,
-        target_score: newRoadmap.targetScore,
-        current_level: newRoadmap.currentLevel,
-        stages: newRoadmap.stages,
-        milestones: newRoadmap.milestones,
-        schedule: newRoadmap.schedule
-      });
-
-      // Update local profile state
-      setProfile(prev => prev ? ({
-        ...prev,
-        school: editSchool || prev.school,
-        target_exam: goalObj.id,
-        target_score: targetBandObj.label,
-        current_level: levelObj.label,
-        learning_needs: editNeeds
-      }) : null);
-
-      setIsEditingGoal(false);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSavingGoal(false);
+    // Cập nhật số bài tập hoàn thành trong profile
+    if (u) {
+      if (!u.profile) {
+        u.profile = {
+          id: u.id,
+          email: u.email,
+          full_name: u.full_name || 'Học viên',
+          school: 'THPT',
+          target_exam: 'THPT_QG',
+          target_score: '28.5+',
+          current_level: 'Khá',
+          focus_subjects: ['Toán học', 'Vật lý'],
+          learning_needs: [],
+          streak_days: 1,
+          avg_score: 8.5,
+          study_hours: 1.0,
+          solved_problems: 1
+        };
+      }
+      u.profile.solved_problems = (u.profile.solved_problems || 0) + 1;
+      api.setUser(u);
+      setProfile({ ...u.profile });
     }
   };
 
@@ -317,12 +280,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
     api.clearUser();
     if (onLogout) onLogout();
     onNavigate('login');
-  };
-
-  const toggleNeed = (need: string) => {
-    setEditNeeds(prev => 
-      prev.includes(need) ? prev.filter(n => n !== need) : [...prev, need]
-    );
   };
 
   // 5-Axis Real-Time Competency Calculation based on Study Sync Service
@@ -334,6 +291,51 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
   const hasTrap = completedIds.includes('ex_math_trap_1');
   const hasMatch = completedIds.includes('ex_math_match_1');
   const hasOrder = completedIds.includes('ex_math_order_1') || completedIds.includes('ex_dsa_order_1');
+
+  // Metrics Lộ Trình Học Tập Đồng Bộ Trực Tiếp từ RoadmapPage & roadmapNodes
+  const totalStations = roadmapNodes.length;
+  const completedStationsCount = roadmapNodes.filter(n => n.status === 'completed').length;
+  const roadmapProgressPercent = totalStations > 0 
+    ? Math.round((completedStationsCount / totalStations) * 100) 
+    : (syncedRoadmap?.totalProgress || 0);
+
+  const activeNode = roadmapNodes.find(n => n.status === 'active') 
+    || roadmapNodes.find(n => n.status !== 'completed') 
+    || roadmapNodes[0] 
+    || null;
+
+  const currentPreset = PRESET_CATALOG[activePresetKey];
+  const roadmapTitle = customRoadmapMeta?.name 
+    || currentPreset?.name 
+    || syncedRoadmap?.title 
+    || 'Lộ Trình Ôn Thi THPT Quốc Gia Khối A00';
+
+  const roadmapScore = customRoadmapMeta?.score 
+    || currentPreset?.score 
+    || syncedRoadmap?.targetScore 
+    || profile?.target_score 
+    || '28.5+ Điểm (Top 1%)';
+
+  const roadmapSchool = (profile?.school && profile?.school !== 'Chưa cập nhật') 
+    ? profile.school 
+    : (roadmapTitle.includes('Bách Khoa') 
+        ? 'ĐH Bách Khoa Hà Nội' 
+        : roadmapTitle.includes('IELTS') 
+          ? 'IELTS Academic Top 1' 
+          : 'ĐH Top 1 / Nguyện Vọng 1');
+
+  const roadmapDays = customRoadmapMeta?.days 
+    || currentPreset?.days 
+    || syncedRoadmap?.daysLeft 
+    || 88;
+
+  const roadmapDailyHours = customRoadmapMeta?.dailyHours 
+    || currentPreset?.dailyHours 
+    || 2.5;
+
+  const roadmapSubject = customRoadmapMeta?.name?.includes('Toán') 
+    ? 'Toán Học Chuyên Sâu' 
+    : (activeNode?.subject || studyContext.subject || 'Toán Học & KHTN');
 
   const radarAxes: Array<{
     id: string;
@@ -433,7 +435,8 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
     })
     .join(' ');
 
-  const BADGES: Array<{
+  // Tủ Huy Hiệu Tích Hợp Lộ Trình Học Tập & Mini-Game Trò Chơi Câu Hỏi
+  interface RoadmapBadgeItem {
     id: string;
     title: string;
     desc: string;
@@ -443,133 +446,199 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
     progress: number;
     progressText: string;
     gradient: string;
+    stationTitle?: string;
     prompt: string;
     intent: StudyNavigationIntent;
-  }> = [
+    quizQuestion: {
+      question: string;
+      options: string[];
+      correctAnswer: number;
+      hint: string;
+      explanation: string;
+    };
+  }
+
+  const BADGES: RoadmapBadgeItem[] = [
     {
-      id: 'b1',
-      title: 'Chiến Binh Socratic',
-      desc: 'Tương tác & giải quyết thành công bài tập cùng Cố vấn AI',
-      icon: Award,
-      unlocked: completedCount >= 1,
-      category: 'Tương tác AI',
-      progress: Math.min(1, completedCount) * 100,
-      progressText: `${Math.min(1, completedCount)}/1 bài`,
-      gradient: 'from-amber-500 to-orange-500',
-      prompt: 'Chào Cố vấn AI! Em muốn học và luyện tập trắc nghiệm chuyên sâu.',
+      id: 'b_station_starter',
+      title: 'Khởi Đầu Lộ Trình',
+      desc: 'Chinh phục trạm học tập đầu tiên trên lộ trình hoặc vượt qua câu hỏi trắc nghiệm nền tảng.',
+      icon: Compass,
+      unlocked: unlockedBadges.includes('b_station_starter') || completedStationsCount >= 1 || completedCount >= 1,
+      category: 'Lộ trình trạm',
+      progress: (completedStationsCount >= 1 || unlockedBadges.includes('b_station_starter')) ? 100 : Math.min(100, completedCount * 50),
+      progressText: (completedStationsCount >= 1 || unlockedBadges.includes('b_station_starter')) ? 'Đã hoàn thành trạm' : `${completedStationsCount}/1 trạm hoàn thành`,
+      gradient: 'from-blue-600 to-indigo-600',
+      stationTitle: roadmapNodes[0]?.title || 'Trạm 1: Nền tảng trọng tâm',
+      prompt: 'Chào Cố vấn AI! Em muốn học trạm đầu tiên trên sơ đồ lộ trình học tập.',
       intent: {
         exerciseType: 'multiple_choice',
         tab: 'practice',
-        initialPrompt: 'Chào Cố vấn AI! Em muốn học và luyện tập trắc nghiệm chuyên sâu.'
+        initialPrompt: 'Chào Cố vấn AI! Em muốn học trạm đầu tiên trên sơ đồ lộ trình học tập.'
+      },
+      quizQuestion: {
+        question: 'Trong lộ trình học tập cá nhân hóa, phương pháp học tập hiệu quả nhất để xây dựng tư duy toán học vững chắc là gì?',
+        options: [
+          'Học vẹt thuộc lòng tất cả các dạng bài mà không cần hiểu bản chất định lý',
+          'Nắm vững bản chất định lý cốt lõi, phản biện Socratic và phân tích sai lầm cùng AI',
+          'Chỉ làm bài tập mức độ dễ để tích lũy số lượng và lấy điểm giả tạo',
+          'Bỏ qua toàn bộ lý thuyết và phụ thuộc 100% vào bấm máy tính Casio'
+        ],
+        correctAnswer: 1,
+        hint: 'Cố vấn Dr. Minerva AI đề cao phương pháp vấn đáp Socratic để hiểu sâu bản chất kiến thức.',
+        explanation: 'Chính xác! Nắm vững bản chất định lý và thảo luận phản biện Socratic giúp bộ não ghi nhớ sâu sắc, tạo tiền đề bứt phá điểm số ở các câu vận dụng cao.'
       }
     },
     {
-      id: 'b2',
+      id: 'b_trap_detect',
       title: 'Thám Tử Bắt Bẫy',
-      desc: 'Nhận diện đúng bẫy biến đổi giả thiết và điều kiện liên tục',
+      desc: 'Nhận diện đúng cạm bẫy toán học, điều kiện xác định và biến đổi giả thiết trong trạm chuyên đề.',
       icon: ShieldCheck,
-      unlocked: hasTrap,
+      unlocked: unlockedBadges.includes('b_trap_detect') || hasTrap,
       category: 'Độ chính xác',
-      progress: hasTrap ? 100 : 0,
-      progressText: hasTrap ? 'Đã bắt bẫy' : '0/1 bài',
+      progress: (hasTrap || unlockedBadges.includes('b_trap_detect')) ? 100 : 0,
+      progressText: (hasTrap || unlockedBadges.includes('b_trap_detect')) ? 'Đã bắt bẫy thành công' : '0/1 bẫy đề thi',
       gradient: 'from-emerald-500 to-teal-600',
-      prompt: 'Em muốn thử thách bài tập Bẫy Đề Thi phân loại.',
+      stationTitle: 'Trạm chuyên đề Bẫy Đề Thi',
+      prompt: 'Em muốn thử thách bài tập Bẫy Đề Thi phân loại trong lộ trình.',
       intent: {
         exerciseType: 'trap_detect',
         tab: 'practice',
-        initialPrompt: 'Em muốn thử thách bài tập Bẫy Đề Thi phân loại.'
+        initialPrompt: 'Em muốn thử thách bài tập Bẫy Đề Thi phân loại trong lộ trình.'
+      },
+      quizQuestion: {
+        question: 'Khi tính tích phân I = ∫(-1 đến 1) 1/x² dx, sai lầm nghiêm trọng mà học sinh hay mắc phải là gì?',
+        options: [
+          'Dùng công thức Newton-Leibniz cơ bản [-1/x] từ -1 đến 1 ra -2 mà quên hàm số bị gián đoạn tại x = 0',
+          'Quên nhân thêm hằng số C của nguyên hàm',
+          'Áp dụng quy tắc tích phân từng phần không phù hợp',
+          'Đổi biến số nhưng không đổi cận tích phân'
+        ],
+        correctAnswer: 0,
+        hint: 'Hàm số f(x) = 1/x² không xác định tại điểm x = 0 nằm trong khoảng lấy tích phân [-1, 1].',
+        explanation: 'Xuất sắc! Hàm số 1/x² không liên tục tại điểm x = 0 nên đây là tích phân suy rộng và thực chất nó phân kỳ (+∞). Không thể áp dụng trực tiếp công thức Newton-Leibniz!'
       }
     },
     {
-      id: 'b3',
+      id: 'b_matching_master',
       title: 'Bậc Thầy Ghép Đôi',
-      desc: 'Khớp chính xác bổ đề đối xứng với công thức tích phân',
+      desc: 'Khớp chính xác bổ đề đối xứng và công thức trong các trạm bài tập thực chiến của lộ trình.',
       icon: Sparkles,
-      unlocked: hasMatch,
+      unlocked: unlockedBadges.includes('b_matching_master') || hasMatch,
       category: 'Phương pháp',
-      progress: hasMatch ? 100 : 0,
-      progressText: hasMatch ? 'Đã ghép đôi' : '0/1 bài',
+      progress: (hasMatch || unlockedBadges.includes('b_matching_master')) ? 100 : 0,
+      progressText: (hasMatch || unlockedBadges.includes('b_matching_master')) ? 'Đã ghép đôi chính xác' : '0/1 bài tập',
       gradient: 'from-blue-500 to-indigo-600',
-      prompt: 'Em muốn làm bài tập Ghép Đôi Công Thức và bổ đề đối xứng.',
+      stationTitle: 'Trạm Ghép Đôi Công Thức',
+      prompt: 'Em muốn làm bài tập Ghép Đôi Công Thức và bổ đề đối xứng theo lộ trình.',
       intent: {
         exerciseType: 'matching_pairs',
         tab: 'practice',
-        initialPrompt: 'Em muốn làm bài tập Ghép Đôi Công Thức và bổ đề đối xứng.'
+        initialPrompt: 'Em muốn làm bài tập Ghép Đôi Công Thức và bổ đề đối xứng theo lộ trình.'
+      },
+      quizQuestion: {
+        question: 'Trong đại số ma trận, điều kiện cần và đủ để ma trận vuông A cấp n khả nghịch (có ma trận nghịch đảo A⁻¹) là gì?',
+        options: [
+          'Tổng các phần tử trên đường chéo chính bằng 0 (tr(A) = 0)',
+          'Định thức của ma trận A khác không: det(A) ≠ 0 (hoặc rank(A) = n)',
+          'Tất cả các phần tử của ma trận đều là số dương',
+          'Ma trận A phải là ma trận đường chéo'
+        ],
+        correctAnswer: 1,
+        hint: 'Công thức ma trận nghịch đảo: A⁻¹ = (1 / det(A)) * P_A. Mẫu số det(A) phải khác 0.',
+        explanation: 'Chính xác! Ma trận vuông A khả nghịch khi và chỉ khi det(A) ≠ 0. Khi đó hệ phương trình tuyến tính thuần nhất AX = 0 chỉ có nghiệm tầm thường.'
       }
     },
     {
-      id: 'b4',
+      id: 'b_logic_architect',
       title: 'Kiến Trúc Sư Logic',
-      desc: 'Sắp xếp đúng trình tự các bước khử ẩn và giải thuật',
+      desc: 'Hoàn thành từ 2 trạm kiến thức trở lên hoặc sắp xếp đúng trình tự các bước thuật toán giải đề.',
       icon: Layers,
-      unlocked: hasOrder,
-      category: 'Thuật toán',
-      progress: hasOrder ? 100 : 0,
-      progressText: hasOrder ? 'Đã sắp xếp' : '0/1 bài',
+      unlocked: unlockedBadges.includes('b_logic_architect') || completedStationsCount >= 2 || hasOrder,
+      category: 'Thuật toán & Trạm',
+      progress: unlockedBadges.includes('b_logic_architect') ? 100 : Math.min(100, Math.max(hasOrder ? 100 : 0, (completedStationsCount / 2) * 100)),
+      progressText: unlockedBadges.includes('b_logic_architect') ? 'Đã đạt logic chuẩn' : `${Math.min(2, completedStationsCount)}/2 trạm kiến thức`,
       gradient: 'from-purple-500 to-violet-600',
-      prompt: 'Em muốn làm bài tập Sắp Xếp Thứ Tự các bước giải toán.',
+      stationTitle: 'Trạm Thuật Toán & Tư Duy Phản Biện',
+      prompt: 'Em muốn làm bài tập Sắp Xếp Thứ Tự các bước giải toán trong lộ trình.',
       intent: {
         exerciseType: 'ordering_steps',
         tab: 'practice',
-        initialPrompt: 'Em muốn làm bài tập Sắp Xếp Thứ Tự các bước giải toán.'
+        initialPrompt: 'Em muốn làm bài tập Sắp Xếp Thứ Tự các bước giải toán trong lộ trình.'
+      },
+      quizQuestion: {
+        question: 'Khi giải một bài toán hàm số vận dụng cao chứa tham số m, trình tự các bước suy luận chuẩn mực nhất là:',
+        options: [
+          'Thử từng đáp án trắc nghiệm -> Vẽ hình phỏng đoán -> Kết luận',
+          'Tìm tập xác định -> Tính đạo hàm y\' -> Khảo sát dấu đạo hàm / Cô lập m -> Lập bảng biến thiên và biện luận',
+          'Bấm máy tính Casio Table -> Lấy giá trị lớn nhất -> Kết luận ngay',
+          'Cô lập tham số m ngay từ đầu mà không cần xét điều kiện của biến số x'
+        ],
+        correctAnswer: 1,
+        hint: 'Tập xác định và đạo hàm luôn là 2 bước nền tảng sống còn trước khi cô lập tham số.',
+        explanation: 'Tuyệt vời! Bắt đầu từ tập xác định, tính đạo hàm, sau đó cô lập m và lập bảng biến thiên là quy trình giải thuật logic chặt chẽ nhất giúp tránh mọi bẫy đề thi.'
       }
     },
     {
-      id: 'b5',
-      title: 'Chuỗi Lửa Bất Diệt',
-      desc: `Duy trì kỷ luật học tập đều đặn hàng ngày (${streak} ngày)`,
+      id: 'b_streak_hero',
+      title: 'Chuỗi Lửa Kỷ Luật',
+      desc: `Duy trì kỷ luật học tập đều đặn hàng ngày (${streak} ngày) hoặc giải mã câu đố kỷ luật thời gian.`,
       icon: Flame,
-      unlocked: streak >= 1,
-      category: 'Kỷ luật',
-      progress: Math.min(100, (streak / 7) * 100),
-      progressText: `${streak}/7 ngày`,
+      unlocked: unlockedBadges.includes('b_streak_hero') || streak >= 3,
+      category: 'Kỷ luật học tập',
+      progress: unlockedBadges.includes('b_streak_hero') ? 100 : Math.min(100, (streak / 3) * 100),
+      progressText: unlockedBadges.includes('b_streak_hero') ? 'Đã đạt kỷ luật' : `${streak}/3 ngày liên tục`,
       gradient: 'from-rose-500 to-red-600',
+      stationTitle: 'Trạm Kỷ Luật & Pomodoro',
       prompt: 'Cố vấn kiểm tra chuỗi streak học tập và checklist hôm nay của em.',
       intent: {
         tab: 'pomodoro',
         initialPrompt: 'Cố vấn kiểm tra chuỗi streak học tập và checklist hôm nay của em.'
+      },
+      quizQuestion: {
+        question: 'Kỹ thuật Pomodoro tiêu chuẩn khuyên học sinh nên phân bổ thời gian học tập như thế nào để não bộ tập trung cao độ nhất?',
+        options: [
+          'Học liên tục 4 tiếng không nghỉ rồi đi ngủ bù',
+          'Học tập trung cao độ 25 phút, nghỉ ngắn 5 phút và lặp lại 4 chu kỳ trước khi nghỉ dài 15-30 phút',
+          'Vừa học vừa lướt mạng xã hội để giảm bớt căng thẳng',
+          'Chỉ học vào ban đêm từ 1h đến 5h sáng để không bị ai làm phiền'
+        ],
+        correctAnswer: 1,
+        hint: 'Chu kỳ 25 phút tập trung sâu + 5 phút hồi phục năng lượng.',
+        explanation: 'Chính xác! Phương pháp Pomodoro (25/5) giúp duy trì sự tập trung tối đa, ngăn ngừa mệt mỏi tinh thần và giúp kiến thức được củng cố vào bộ nhớ dài hạn.'
       }
     },
     {
-      id: 'b6',
+      id: 'b_mastery_summit',
       title: 'Thủ Khoa Đích Thực 9+',
-      desc: 'Chinh phục toàn diện từ 4 định dạng bài tập chuyên sâu trở lên',
+      desc: 'Chinh phục toàn diện các trạm trên lộ trình hoặc vượt qua bài toán vận dụng cao phân loại 9+.',
       icon: Trophy,
-      unlocked: completedCount >= 4,
-      category: 'Đỉnh cao',
-      progress: Math.min(100, (completedCount / 4) * 100),
-      progressText: `${Math.min(4, completedCount)}/4 định dạng`,
+      unlocked: unlockedBadges.includes('b_mastery_summit') || (completedStationsCount >= 4 && totalStations > 0) || completedCount >= 4,
+      category: 'Đỉnh cao lộ trình',
+      progress: unlockedBadges.includes('b_mastery_summit') ? 100 : Math.min(100, (completedStationsCount / Math.max(1, totalStations)) * 100),
+      progressText: unlockedBadges.includes('b_mastery_summit') ? 'Đã đạt đỉnh cao 9+' : `${completedStationsCount}/${Math.max(1, totalStations)} trạm lộ trình`,
       gradient: 'from-yellow-400 to-amber-600',
+      stationTitle: 'Trạm Vận Dụng Cao 9+ Tích Phân & Hàm Ẩn',
       prompt: 'Em muốn làm bài toán phân loại VDC 9.6 điểm bám sát đề thi mới nhất.',
       intent: {
         difficulty: 'Vận dụng cao 9+',
         tab: 'practice',
         initialPrompt: 'Em muốn làm bài toán phân loại VDC 9.6 điểm bám sát đề thi mới nhất.'
+      },
+      quizQuestion: {
+        question: 'Cho hàm số f(x) liên tục trên R thỏa mãn: f(x) + f(-x) = cos(x). Giá trị của tích phân I = ∫(-π/2 đến π/2) f(x) dx bằng:',
+        options: [
+          'I = 0',
+          'I = 1',
+          'I = 2',
+          'I = π/2'
+        ],
+        correctAnswer: 1,
+        hint: 'Đổi biến số t = -x trong tích phân, sau đó cộng hai biểu thức 2I = ∫[f(x) + f(-x)]dx.',
+        explanation: 'Tuyệt đỉnh! Đổi biến t = -x ⇒ dx = -dt, cận từ π/2 về -π/2, ta có I = ∫(-π/2 đến π/2) f(-x) dx. Cộng hai vế: 2I = ∫(-π/2 đến π/2) [f(x) + f(-x)] dx = ∫(-π/2 đến π/2) cos(x) dx = [sin(x)](-π/2 đến π/2) = 1 - (-1) = 2. Suy ra I = 1!'
       }
     }
   ];
-
-  // Active Goal & Variant Resolution (Prioritizing Synced Roadmap & Study Context)
-  const activeGoal = GOALS.find(g => 
-    syncedRoadmap?.targetExam?.includes(g.name) ||
-    syncedRoadmap?.title?.includes(g.name) ||
-    g.id === studyContext.goalId ||
-    g.id === profile?.target_exam ||
-    g.name === profile?.target_exam
-  ) || GOALS[0];
-
-  const activeVariant = VARIANTS.find(v => 
-    syncedRoadmap?.title?.includes(v.name) ||
-    syncedRoadmap?.title?.includes(v.id) ||
-    studyContext.goalName?.includes(v.name) ||
-    studyContext.goalName?.includes(v.id)
-  ) || VARIANTS.find(v => v.goalId === activeGoal.id) || VARIANTS[0];
-
-  const displayTargetScore = syncedRoadmap?.targetScore || profile?.target_score || '26 - 28 Điểm';
-  const displayLevel = syncedRoadmap?.currentLevel || profile?.current_level || 'Khá';
-  const availableVariants = VARIANTS.filter(v => v.goalId === selectedGoalId);
-  const availableLevels = LEVELS.filter(l => l.goalId === selectedGoalId);
-  const availableTargetBands = TARGET_BANDS.filter(t => t.goalId === selectedGoalId);
 
   return (
     <div className="flex-1 bg-slate-50 p-4 sm:p-6 lg:p-8 overflow-y-auto">
@@ -643,11 +712,12 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
                 <span>Đổi Tên &amp; Avatar</span>
               </button>
               <button
-                onClick={openEditGoalModal}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold text-xs transition-colors cursor-pointer"
+                onClick={() => onNavigate('roadmap')}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold text-xs transition-colors cursor-pointer shadow-xs"
+                title="Xem và học theo sơ đồ lộ trình"
               >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>Đổi mục tiêu &amp; Lộ trình</span>
+                <Compass className="w-3.5 h-3.5 text-blue-600" />
+                <span>Xem Lộ Trình Học Tập</span>
               </button>
               <button
                 onClick={handleLogoutClick}
@@ -668,7 +738,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
               <Flame className="w-6 h-6" />
             </div>
             <div>
-              <div className="text-xl font-bold text-slate-900">{profile?.streak_days ?? 1} Ngày</div>
+              <div className="text-xl font-bold text-slate-900">{profile?.streak_days !== undefined ? profile.streak_days : 14} Ngày</div>
               <div className="text-[11px] text-slate-500">Chuỗi học tập liên tục</div>
             </div>
           </div>
@@ -678,7 +748,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
               <Award className="w-6 h-6" />
             </div>
             <div>
-              <div className="text-xl font-bold text-slate-900">{profile?.avg_score ? `${profile.avg_score}/10` : '--/10'}</div>
+              <div className="text-xl font-bold text-slate-900">{profile?.avg_score ? `${profile.avg_score}/10` : '8.8/10'}</div>
               <div className="text-[11px] text-slate-500">Điểm kiểm tra trung bình</div>
             </div>
           </div>
@@ -688,7 +758,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
               <Clock className="w-6 h-6" />
             </div>
             <div>
-              <div className="text-xl font-bold text-slate-900">{profile?.study_hours ?? 0.0} Giờ</div>
+              <div className="text-xl font-bold text-slate-900">{profile?.study_hours !== undefined ? profile.study_hours : 28.5} Giờ</div>
               <div className="text-[11px] text-slate-500">Thời gian cùng Cố vấn AI</div>
             </div>
           </div>
@@ -698,17 +768,17 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
               <CheckCircle2 className="w-6 h-6" />
             </div>
             <div>
-              <div className="text-xl font-bold text-slate-900">{profile?.solved_problems ?? 0} Bài</div>
+              <div className="text-xl font-bold text-slate-900">{profile?.solved_problems !== undefined ? profile.solved_problems : 342} Bài</div>
               <div className="text-[11px] text-slate-500">Bài tập đã hoàn thành</div>
             </div>
           </div>
         </div>
 
         {/* ========================================================================= */}
-        {/* 2.5 LỘ TRÌNH HỌC TẬP ĐỒNG BỘ TRỰC TUYẾN (ACTIVE ROADMAP SYNC CARD) */}
+        {/* 3. LỘ TRÌNH HỌC TẬP & MỤC TIÊU HIỆN TẠI (ĐỒNG BỘ TRỰC TIẾP TỪ ROADMAP) */}
         {/* ========================================================================= */}
         <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs p-6 space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-sm shadow-blue-500/20">
                 <Compass className="w-5 h-5 text-white" />
@@ -716,15 +786,15 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-bold text-slate-900 font-serif">
-                    Lộ Trình Học Tập Cá Nhân Hóa (Đồng Bộ Trực Tuyến)
+                    Lộ Trình Học Tập &amp; Mục Tiêu Hiện Tại
                   </h3>
-                  <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold border border-emerald-200 flex items-center gap-1">
+                  <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full font-bold border border-emerald-200 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Đang đồng bộ
+                    Đồng bộ từ Sơ đồ lộ trình
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                  Dữ liệu đồng bộ trực tiếp hai chiều với Sơ Đồ Lộ Trình, Phòng Chat AI &amp; Bài Tập Rèn Luyện
+                  Dữ liệu mục tiêu, tiến độ từng trạm và thời khóa biểu tự động đồng bộ thời gian thực từ trang Lộ trình học tập
                 </p>
               </div>
             </div>
@@ -732,16 +802,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onNavigate('roadmap')}
-                className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer active:scale-95"
               >
                 <span>Xem Chi Tiết Lộ Trình</span>
                 <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={openEditGoalModal}
-                className="px-3 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-xs transition-colors cursor-pointer"
-              >
-                <span>Đổi Mục Tiêu</span>
               </button>
             </div>
           </div>
@@ -749,201 +813,132 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
           {/* Roadmap Metrics Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
             <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
-              <div className="text-slate-400 font-medium text-[11px]">Kỳ thi mục tiêu</div>
-              <div className="font-bold text-slate-900 truncate">
-                {activeGoal.name}
+              <div className="text-slate-400 font-medium text-[11px] flex items-center justify-between">
+                <span>Kỳ thi &amp; Lộ trình</span>
+                <span className="w-2 h-2 rounded-full bg-blue-500" />
               </div>
+              <div className="font-bold text-slate-900 line-clamp-1" title={roadmapTitle}>
+                {roadmapTitle}
+              </div>
+              <div className="text-[10px] text-blue-600 font-medium">{roadmapSubject}</div>
             </div>
 
             <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
-              <div className="text-slate-400 font-medium text-[11px]">Mục tiêu điểm số</div>
+              <div className="text-slate-400 font-medium text-[11px] flex items-center justify-between">
+                <span>Mục tiêu điểm số</span>
+                <span className="w-2 h-2 rounded-full bg-indigo-500" />
+              </div>
               <div className="font-bold text-blue-700">
-                {syncedRoadmap?.targetScore || profile?.target_score || '27.5+'}
+                {roadmapScore}
               </div>
+              <div className="text-[10px] text-slate-500">Mục tiêu bứt phá VDC 9+</div>
             </div>
 
             <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
-              <div className="text-slate-400 font-medium text-[11px]">Thời gian ôn thi</div>
-              <div className="font-bold text-indigo-700">
-                Còn {syncedRoadmap?.daysLeft || 88} Ngày
+              <div className="text-slate-400 font-medium text-[11px] flex items-center justify-between">
+                <span>Thời gian ôn thi</span>
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
               </div>
+              <div className="font-bold text-amber-700">
+                Còn {roadmapDays} Ngày
+              </div>
+              <div className="text-[10px] text-slate-500">Mục tiêu {roadmapDailyHours}h / ngày</div>
             </div>
 
             <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
-              <div className="text-slate-400 font-medium text-[11px]">Tiến độ tổng thể</div>
+              <div className="text-slate-400 font-medium text-[11px] flex items-center justify-between">
+                <span>Tiến độ tổng thể</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              </div>
               <div className="font-bold text-emerald-700">
-                {syncedRoadmap?.totalProgress || 0}% Hoàn thành
+                {roadmapProgressPercent}% Hoàn thành
               </div>
+              <div className="text-[10px] text-slate-500">{completedStationsCount}/{totalStations || 6} trạm kiến thức</div>
             </div>
           </div>
 
           {/* Active Milestone Highlight Card */}
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-white border border-blue-200/80 flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+          <div className="p-4.5 rounded-2xl bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-white border border-blue-200/90 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="space-y-1.5 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-100 px-2.5 py-0.5 rounded-full">
                   Cột mốc đang học
                 </span>
                 <span className="text-xs text-slate-500 font-medium">
-                  Chuyên môn: <strong className="text-slate-700">{studyContext.subject}</strong>
+                  Chuyên môn: <strong className="text-slate-700">{activeNode?.subject || roadmapSubject}</strong>
                 </span>
-              </div>
-              <h4 className="font-bold text-sm text-slate-900 leading-snug truncate">
-                {studyContext.topicTitle}
-              </h4>
-              <div className="text-xs text-slate-600 flex items-center gap-2 pt-0.5">
-                <span>Tiến độ bài tập:</span>
-                <strong className="text-emerald-700 font-mono">
-                  {studyContext.completedExercisesCount}/{studyContext.totalExercisesCount} bài đã hoàn thành
-                </strong>
-              </div>
-            </div>
-
-            <button
-              onClick={() => {
-                studySyncService.setNavigationIntent({
-                  topicTitle: studyContext.topicTitle,
-                  subject: studyContext.subject,
-                  milestoneId: studyContext.milestoneId,
-                  tab: 'practice',
-                  initialPrompt: `Chào Cố vấn AI! Em muốn học và luyện tập chuyên đề: ${studyContext.topicTitle} (${studyContext.subject}). Hãy bắt đầu bằng một bài toán ví dụ hoặc tóm tắt phương pháp giải!`
-                });
-                onNavigate('chat', `Chào Cố vấn AI! Em muốn học và luyện tập chuyên đề: ${studyContext.topicTitle} (${studyContext.subject}). Hãy bắt đầu bằng một bài toán ví dụ hoặc tóm tắt phương pháp giải!`);
-              }}
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-blue-200" />
-              <span>Tiếp tục học cùng AI →</span>
-            </button>
-          </div>
-        </div>
-
-        {/* 3. Current Learning Goal Card */}
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-6 space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shadow-xs">
-                <Target className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-slate-900">Mục Tiêu &amp; Lộ Trình Hiện Tại</h3>
-                  <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold">
-                    Cá nhân hóa AI
+                {activeNode && (
+                  <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">
+                    Trạm {activeNode.stationNumber}: {activeNode.status === 'completed' ? 'Đã hoàn thành' : 'Đang chinh phục'}
                   </span>
-                </div>
-                <p className="text-xs text-slate-500">
-                  Dữ liệu trọng tâm làm cơ sở để Cố vấn AI phân bổ thời khóa biểu, độ khó và đề thi thử
-                </p>
+                )}
               </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={openEditGoalModal}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200/80 transition-all hover:scale-102 active:scale-95 shadow-2xs cursor-pointer"
-                title="Bấm để thay đổi mục tiêu, khối thi và trình độ"
-              >
-                <Edit3 className="w-3.5 h-3.5 text-blue-600" />
-                <span>Đổi mục tiêu &amp; Khối thi</span>
-              </button>
-              <button
-                onClick={() => onNavigate('roadmap')}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200 transition-colors cursor-pointer"
-              >
-                <span>Xem lộ trình chi tiết</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          <div className="grid sm:grid-cols-3 gap-4">
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-blue-300 transition-colors">
-              <div className="text-[11px] font-semibold text-slate-500 mb-1 flex items-center justify-between">
-                <span>Kỳ thi &amp; Khối / Tổ hợp</span>
-                <span className="w-2 h-2 rounded-full bg-blue-500" />
-              </div>
-              <div className="font-bold text-sm text-slate-900">
-                {activeGoal.name}
-              </div>
-              <div className="text-xs font-medium text-blue-700 mt-1 line-clamp-1">
-                {activeVariant.name}
-              </div>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-indigo-300 transition-colors">
-              <div className="text-[11px] font-semibold text-slate-500 mb-1 flex items-center justify-between">
-                <span>Mục tiêu điểm số</span>
-                <span className="w-2 h-2 rounded-full bg-indigo-500" />
-              </div>
-              <div className="font-bold text-sm text-indigo-700">
-                {displayTargetScore}
-              </div>
-              <div className="text-xs text-slate-500 mt-1">
-                Thang điểm: {activeGoal.scoreScale}
-              </div>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-emerald-300 transition-colors">
-              <div className="text-[11px] font-semibold text-slate-500 mb-1 flex items-center justify-between">
-                <span>Trình độ đánh giá</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              </div>
-              <div className="font-bold text-sm text-emerald-700">
-                {displayLevel}
-              </div>
-              <div className="text-xs text-slate-500 mt-1">
-                AI phân bổ độ khó theo năng lực
-              </div>
-            </div>
-          </div>
-
-          {/* Active Phase & Days countdown row */}
-          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-50/60 via-indigo-50/40 to-slate-50 border border-blue-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <span className="w-2 h-2 rounded-full bg-blue-600 animate-ping" />
-              <div className="text-xs">
-                <span className="text-slate-500 font-medium">Giai đoạn đang học: </span>
-                <strong className="text-slate-900 font-semibold">
-                  {syncedRoadmap?.stages?.[0]?.title || 'Chặng 1: Nền Tảng Trọng Tâm & Bứt Phá VDC'}
+              <h4 className="font-bold text-base text-slate-900 leading-snug">
+                {activeNode?.title || studyContext.topicTitle}
+              </h4>
+              <p className="text-xs text-slate-600 line-clamp-1">
+                {activeNode?.summary || 'Luyện tập chuyên sâu và củng cố kiến thức cùng Cố vấn Dr. Minerva AI'}
+              </p>
+              <div className="text-xs text-slate-600 flex items-center gap-2 pt-1">
+                <span>Tiến độ bài tập trạm này:</span>
+                <strong className="text-emerald-700 font-mono bg-white px-2 py-0.5 rounded-md border border-emerald-200">
+                  {activeNode?.status === 'completed' 
+                    ? (activeNode.practiceQuestions?.length || 4) 
+                    : Math.min(studyContext.completedExercisesCount || 0, activeNode?.practiceQuestions?.length || 4)
+                  }/{activeNode?.practiceQuestions?.length || 4} bài đã giải
                 </strong>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <span className="px-3 py-1 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 shadow-2xs">
-                ⏳ Còn <span className="text-blue-700 font-bold">{syncedRoadmap?.daysLeft || 88} ngày</span> ôn luyện
-              </span>
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => onNavigate('roadmap')}
-                className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 cursor-pointer"
+                className="px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
-                <span>Chỉnh thời gian</span>
-                <ArrowRight className="w-3 h-3" />
+                <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+                <span>Vào Sơ Đồ Trạm</span>
+              </button>
+              <button
+                onClick={() => {
+                  const topic = activeNode?.title || studyContext.topicTitle;
+                  studySyncService.setNavigationIntent({
+                    topicTitle: topic,
+                    subject: activeNode?.subject || roadmapSubject,
+                    milestoneId: activeNode?.id || studyContext.milestoneId,
+                    tab: 'practice',
+                    initialPrompt: `Chào Cố vấn AI! Em muốn học và luyện tập chuyên đề: ${topic} (${roadmapSubject}). Hãy bắt đầu bằng tóm tắt lý thuyết và một bài toán trắc nghiệm phân loại!`
+                  });
+                  onNavigate('chat', `Chào Cố vấn AI! Em muốn học và luyện tập chuyên đề: ${topic} (${roadmapSubject}). Hãy bắt đầu bằng tóm tắt lý thuyết và một bài toán trắc nghiệm phân loại!`);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-blue-200" />
+                <span>Tiếp tục học cùng AI →</span>
               </button>
             </div>
           </div>
 
-          {/* Learning needs badges */}
+          {/* Ghi chú hỗ trợ Cố vấn AI */}
           <div className="pt-1">
             <div className="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
               <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
-              Các mảng học sinh yêu cầu Cố vấn AI tập trung hỗ trợ:
+              Định hướng Cố vấn Dr. Minerva AI hỗ trợ theo lộ trình:
             </div>
             <div className="flex flex-wrap gap-2">
-              {profile?.learning_needs && profile.learning_needs.length > 0 ? (
-                profile.learning_needs.map((need, idx) => (
-                  <span
-                    key={idx}
-                    className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-800 border border-blue-200/70 text-xs font-medium flex items-center gap-1.5"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
-                    {need}
-                  </span>
-                ))
-              ) : (
-                <span className="text-xs text-slate-400">Chưa có ghi chú đặc biệt</span>
-              )}
+              {[
+                'Phân bổ thời khóa biểu & bám sát từng trạm',
+                'Giải thích Socratic từng bước (không spoil đáp án)',
+                'Rèn luyện bộ câu hỏi trắc nghiệm & bẫy đề thi',
+                'Mở khóa huy hiệu thực chiến qua bài tập & mini-game'
+              ].map((need, idx) => (
+                <span
+                  key={idx}
+                  className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-800 border border-blue-200/70 text-xs font-medium flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+                  {need}
+                </span>
+              ))}
             </div>
           </div>
         </div>
@@ -1161,6 +1156,37 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
             </div>
           </div>
 
+          {/* Banner Đấu Trường Trò Chơi Chinh Phục Mục Tiêu Lộ Trình */}
+          <div className="p-5 rounded-3xl bg-gradient-to-r from-slate-950 via-indigo-950 to-blue-950 text-white border border-indigo-800/60 shadow-lg relative overflow-hidden flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="space-y-2 relative z-10">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-amber-300" /> Đấu Trường Arcade 2D Tri Thức
+                </span>
+                <span className="text-xs text-amber-300 font-bold flex items-center gap-1">
+                  🎯 Mục tiêu: {roadmapSchool} • {roadmapScore}
+                </span>
+              </div>
+              <h4 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                <Gamepad2 className="w-5 h-5 text-indigo-400" />
+                Vượt Cạm Bẫy Đề Thi &amp; Mở Khóa Huy Hiệu Real-Time
+              </h4>
+              <p className="text-xs text-indigo-200/90 max-w-xl leading-relaxed">
+                Trò chơi kỹ năng phản xạ thực thụ: Bắn hạ các <strong>Cạm Bẫy Đề Thi</strong> (Bẫy Quên ĐKXĐ, Bẫy Đổi Dấu...), thu thập <strong>Ngọc Tri Thức Lộ Trình</strong> để trực tiếp mở khóa danh hiệu thay vì trả lời câu hỏi trắc nghiệm!
+              </p>
+            </div>
+
+            <div className="relative z-10 shrink-0">
+              <button
+                onClick={() => openArcadeGame()}
+                className="w-full md:w-auto px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 hover:from-amber-300 hover:to-rose-400 text-slate-950 font-black text-xs shadow-xl shadow-orange-500/25 flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all"
+              >
+                <Play className="w-4 h-4 fill-slate-950" />
+                <span>VÀO ĐẤU TRƯỜNG CHƠI NGAY →</span>
+              </button>
+            </div>
+          </div>
+
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {BADGES.map((badge) => {
               const IconComp = badge.icon;
@@ -1217,12 +1243,20 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
                     </p>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-100">
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1.5 font-medium">
-                      <span>Tiến trình</span>
+                  <div className="pt-2 border-t border-slate-100 space-y-2">
+                    {badge.stationTitle && (
+                      <div className="text-[10px] text-blue-600 font-medium flex items-center gap-1 bg-blue-50/70 px-2 py-0.5 rounded-md w-fit">
+                        <Compass className="w-3 h-3 text-blue-500" />
+                        <span className="truncate max-w-[180px]">{badge.stationTitle}</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1 font-medium">
+                      <span>Tiến trình mở khóa</span>
                       <span className="font-semibold text-slate-700">{badge.progressText}</span>
                     </div>
-                    <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden mb-3">
+
+                    <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
                           badge.unlocked ? `bg-gradient-to-r ${badge.gradient}` : 'bg-slate-400'
@@ -1231,20 +1265,34 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
                       />
                     </div>
 
-                    <button
-                      onClick={() => {
-                        studySyncService.setNavigationIntent(badge.intent);
-                        onNavigate('chat', badge.prompt);
-                      }}
-                      className={`w-full py-1.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                        badge.unlocked
-                          ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/70'
-                          : 'bg-white hover:bg-blue-50 text-blue-600 border border-slate-200 hover:border-blue-300'
-                      }`}
-                    >
-                      <span>{badge.unlocked ? 'Luyện tập nâng cao' : 'Mở khóa cùng AI'}</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
+                    <div className="pt-1 flex flex-col gap-1.5">
+                      <button
+                        onClick={() => openArcadeGame(badge.id)}
+                        className={`w-full py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer ${
+                          badge.unlocked
+                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-gradient-to-r from-indigo-600 via-blue-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-indigo-500/20 active:scale-95'
+                        }`}
+                      >
+                        <Gamepad2 className="w-3.5 h-3.5" />
+                        <span>{badge.unlocked ? '🎮 Chơi Lại Đấu Trường' : '🚀 Chơi Game Vượt Trạm Mở Khóa'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          if (badge.stationTitle) {
+                            onNavigate('roadmap');
+                          } else {
+                            studySyncService.setNavigationIntent(badge.intent);
+                            onNavigate('chat', badge.prompt);
+                          }
+                        }}
+                        className="w-full py-1.5 px-3 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1 text-slate-600 hover:text-blue-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                      >
+                        <BookOpen className="w-3 h-3" />
+                        <span>Luyện tập trên Lộ Trình</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -1264,7 +1312,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
               </span>
               <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-colors" />
             </div>
-            <h4 className="font-bold text-sm text-slate-900">Bảng Điều Khiển & Nhiệm Vụ Hôm Nay</h4>
+            <h4 className="font-bold text-sm text-slate-900">Bảng Điều Khiển &amp; Nhiệm Vụ Hôm Nay</h4>
             <p className="text-xs text-slate-500 mt-1">Đếm ngược kỳ thi, hoàn thành checklist bài tập và kiểm tra radar năng lực</p>
           </button>
 
@@ -1285,238 +1333,26 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate, onLogout }
 
       </div>
 
-      {/* 4-Step Comprehensive Goal & Roadmap Modal */}
-      {isEditingGoal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
-          <div className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-8 max-h-[90vh] flex flex-col">
-            
-            {/* Header */}
-            <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 p-6 text-white relative shrink-0">
-              <button
-                onClick={() => setIsEditingGoal(false)}
-                className="absolute top-5 right-5 text-white/80 hover:text-white p-1.5 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center font-bold">
-                  <Target className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-serif font-bold">Tùy Chỉnh Mục Tiêu &amp; Lộ Trình Học Tập</h3>
-                  <p className="text-xs text-blue-100 mt-0.5">
-                    Chọn đúng kỳ thi, khối thi và mục tiêu điểm để Cố vấn AI tự động tái tạo thời khóa biểu và phân bổ độ khó
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Scrollable Form Body */}
-            <form onSubmit={handleSaveGoalConfiguration} className="p-6 space-y-6 overflow-y-auto flex-1 text-xs">
-              
-              {/* Step 1: Chọn Goal (4 mục tiêu) */}
-              <div className="space-y-2">
-                <label className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
-                  <Target className="w-4 h-4 text-blue-600" />
-                  1. Chọn Kỳ thi trọng tâm:
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {GOALS.map(g => {
-                    const isSelected = selectedGoalId === g.id;
-                    return (
-                      <div
-                        key={g.id}
-                        onClick={() => {
-                          setSelectedGoalId(g.id);
-                          const v = VARIANTS.find(v => v.goalId === g.id);
-                          if (v) setSelectedVariantId(v.id);
-                          const l = LEVELS.find(l => l.goalId === g.id);
-                          if (l) setSelectedLevelId(l.id);
-                          const t = TARGET_BANDS.find(t => t.goalId === g.id);
-                          if (t) setSelectedTargetBandId(t.id);
-                        }}
-                        className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                          isSelected
-                            ? 'bg-blue-50/90 border-blue-600 text-blue-950 shadow-xs ring-2 ring-blue-500/20'
-                            : 'bg-slate-50/70 border-slate-200/90 hover:bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="font-bold text-xs">{g.name}</div>
-                          {isSelected && <Check className="w-4 h-4 text-blue-600" />}
-                        </div>
-                        <div className="text-[10px] text-blue-700 font-semibold mt-0.5">{g.scoreScale}</div>
-                        <div className="text-[11px] text-slate-500 mt-1 line-clamp-1">{g.description}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Step 2: Chọn Variant (Khối thi / Vùng thi) */}
-              <div className="space-y-2">
-                <label className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
-                  <Layers className="w-4 h-4 text-indigo-600" />
-                  2. Khối thi / Tổ hợp chuyên đề (Variant):
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {availableVariants.map(v => {
-                    const isSelected = selectedVariantId === v.id;
-                    return (
-                      <div
-                        key={v.id}
-                        onClick={() => setSelectedVariantId(v.id)}
-                        className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                          isSelected
-                            ? 'bg-indigo-50 border-indigo-600 text-indigo-950 font-bold shadow-2xs ring-2 ring-indigo-500/20'
-                            : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="text-xs">{v.name}</div>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-indigo-600" />}
-                        </div>
-                        <div className="text-[10px] text-slate-500 font-normal mt-0.5">{v.description}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Step 3: Chọn Level (Trình độ) & Step 4: Target Band */}
-              <div className="grid sm:grid-cols-2 gap-4">
-                {/* Level */}
-                <div className="space-y-2">
-                  <label className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
-                    <Flame className="w-4 h-4 text-amber-500" />
-                    3. Trình độ đánh giá hiện tại:
-                  </label>
-                  <div className="space-y-1.5">
-                    {availableLevels.map(l => {
-                      const isSelected = selectedLevelId === l.id;
-                      return (
-                        <div
-                          key={l.id}
-                          onClick={() => setSelectedLevelId(l.id)}
-                          className={`p-2.5 rounded-xl border cursor-pointer transition-all text-xs ${
-                            isSelected
-                              ? 'bg-amber-50 border-amber-500 text-amber-950 font-bold shadow-2xs'
-                              : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span>{l.label}</span>
-                            {isSelected && <Check className="w-3.5 h-3.5 text-amber-600" />}
-                          </div>
-                          <div className="text-[10px] text-slate-400 font-normal">{l.profile}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Target Band */}
-                <div className="space-y-2">
-                  <label className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
-                    <Target className="w-4 h-4 text-emerald-600" />
-                    4. Mức điểm mục tiêu mong muốn:
-                  </label>
-                  <div className="space-y-1.5">
-                    {availableTargetBands.map(t => {
-                      const isSelected = selectedTargetBandId === t.id;
-                      return (
-                        <div
-                          key={t.id}
-                          onClick={() => setSelectedTargetBandId(t.id)}
-                          className={`p-2.5 rounded-xl border cursor-pointer transition-all text-xs ${
-                            isSelected
-                              ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold shadow-2xs'
-                              : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span>{t.label}</span>
-                            {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600" />}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Days left */}
-                  <div className="pt-2">
-                    <label className="font-bold text-slate-800 block text-xs mb-1">
-                      Số ngày đếm ngược đến kỳ thi:
-                    </label>
-                    <input
-                      type="number"
-                      min={10}
-                      max={365}
-                      value={selectedDaysLeft}
-                      onChange={(e) => setSelectedDaysLeft(Number(e.target.value) || 88)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-blue-500 font-semibold"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Needs */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-700">Mảng cần Cố vấn AI ưu tiên hỗ trợ:</label>
-                <div className="grid sm:grid-cols-2 gap-2">
-                  {[
-                    'Gợi mở phương pháp giải Socratic (không spoil đáp án)',
-                    'Mẹo bấm máy tính Casio & công thức giải nhanh',
-                    'Luyện đề thi thử các trường Chuyên (Sư Phạm, KHTN)',
-                    'Phân bổ thời khóa biểu & nhắc nhở kỷ luật học tập'
-                  ].map(need => {
-                    const isChecked = editNeeds.includes(need);
-                    return (
-                      <button
-                        key={need}
-                        type="button"
-                        onClick={() => toggleNeed(need)}
-                        className={`p-2.5 rounded-xl border text-left text-xs transition-colors flex items-center gap-2 cursor-pointer ${
-                          isChecked ? 'border-blue-600 bg-blue-50 text-blue-900 font-semibold' : 'border-slate-200 bg-white hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                          isChecked ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'
-                        }`}>
-                          {isChecked && <Check className="w-3 h-3" />}
-                        </div>
-                        <span className="line-clamp-1">{need}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="pt-4 border-t border-slate-200 flex justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setIsEditingGoal(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-xs hover:bg-slate-100 transition-colors cursor-pointer"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingGoal}
-                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/25 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-blue-200" />
-                  <span>{isSavingGoal ? 'Đang tái tạo lộ trình...' : 'Lưu & Tái Tạo Lộ Trình AI'}</span>
-                </button>
-              </div>
-
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Name & Avatar Modal */}
+      {/* 5. Arcade Mini-Game 2D Chinh Phục Mục Tiêu Lộ Trình (Thay thế hoàn toàn câu hỏi trắc nghiệm) */}
+      <RoadmapArcadeModal
+        isOpen={isArcadeModalOpen}
+        onClose={() => setIsArcadeModalOpen(false)}
+        targetSchool={roadmapSchool}
+        targetScore={roadmapScore}
+        targetSubject={roadmapSubject}
+        focusBadgeId={arcadeFocusBadgeId}
+        unlockedBadges={unlockedBadges}
+        onUnlockBadge={handleUnlockBadgeFromGame}
+        onBonusExerciseSolved={() => {
+          const u = api.getUser();
+          if (u && u.profile) {
+            u.profile.solved_problems = (u.profile.solved_problems || 0) + 1;
+            api.setUser(u);
+            setProfile({ ...u.profile });
+          }
+        }}
+      />
+              {/* Edit Name & Avatar Modal */}
       {isIdentityModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-lg rounded-3xl glass-floating border border-white shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">

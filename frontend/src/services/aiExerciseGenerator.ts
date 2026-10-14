@@ -580,7 +580,7 @@ export function generateAiExerciseForms(
         description: 'Bao quát toàn diện 6 định dạng câu hỏi: Sắp xếp bước, Trắc nghiệm, Đúng/Sai 2025, Điền khuyết, Ghép đôi và Bắt bẫy.',
         formType: 'comprehensive',
         exercises: form1Exercises,
-        createdAt: 'Vừa tạo bởi Gemini AI'
+        createdAt: 'Vừa tạo bởi EduAdvisor AI'
       },
       {
         id: `form_algo_2_${seed}`,
@@ -588,7 +588,7 @@ export function generateAiExerciseForms(
         description: 'Tập trung chuyên sâu vào các ngộ nhận lập trình, tràn số, bẫy vùng nhớ và chùm nhận định Đúng/Sai chuẩn cấu trúc mới.',
         formType: 'trap_and_true_false',
         exercises: form2Exercises,
-        createdAt: 'Vừa tạo bởi Gemini AI'
+        createdAt: 'Vừa tạo bởi EduAdvisor AI'
       },
       {
         id: `form_algo_3_${seed}`,
@@ -596,7 +596,7 @@ export function generateAiExerciseForms(
         description: 'Chinh phục quy hoạch động nâng cao, cấu trúc dữ liệu tiên tiến (BIT, DSU, Dijkstra, KMP, TSP) và kỹ thuật đạt điểm 10.',
         formType: 'advanced_9plus',
         exercises: form3Exercises,
-        createdAt: 'Vừa tạo bởi Gemini AI'
+        createdAt: 'Vừa tạo bởi EduAdvisor AI'
       }
     ];
 
@@ -752,7 +752,7 @@ export function generateAiExerciseForms(
         description: 'Bao quát toàn diện các bước khử Gauss, Kronecker-Capelli, bậc thang rút gọn, định thức và bẫy pivot.',
         formType: 'comprehensive',
         exercises: form1Exercises,
-        createdAt: 'Vừa tạo bởi Gemini AI'
+        createdAt: 'Vừa tạo bởi EduAdvisor AI'
       },
       {
         id: `form_gs_2_${seed}`,
@@ -760,7 +760,7 @@ export function generateAiExerciseForms(
         description: 'Rèn luyện khả năng phân loại nghiệm, nhận diện định lý Kronecker-Capelli và tránh bẫy chia cho 0.',
         formType: 'trap_and_true_false',
         exercises: form1Exercises.slice(1, 8),
-        createdAt: 'Vừa tạo bởi Gemini AI'
+        createdAt: 'Vừa tạo bởi EduAdvisor AI'
       },
       {
         id: `form_gs_3_${seed}`,
@@ -768,7 +768,7 @@ export function generateAiExerciseForms(
         description: 'Hệ phương trình chứa tham số m, điều kiện vô số nghiệm, cơ sở không gian vector và ma trận trực giao.',
         formType: 'advanced_9plus',
         exercises: form1Exercises,
-        createdAt: 'Vừa tạo bởi Gemini AI'
+        createdAt: 'Vừa tạo bởi EduAdvisor AI'
       }
     ];
 
@@ -923,7 +923,7 @@ export function generateAiExerciseForms(
       description: `Bao quát 6 dạng câu hỏi trọng tâm cho chuyên đề ${topic}.`,
       formType: 'comprehensive',
       exercises: defaultExs,
-      createdAt: 'Vừa tạo bởi Gemini AI'
+      createdAt: 'Vừa tạo bởi EduAdvisor AI'
     },
     {
       id: `form_gen_2_${seed}`,
@@ -931,7 +931,7 @@ export function generateAiExerciseForms(
       description: 'Chuyên sâu bẫy ngộ nhận đề thi, chùm đúng sai 4 ý và phân loại nghiệm.',
       formType: 'trap_and_true_false',
       exercises: defaultExs.slice(1, 8),
-      createdAt: 'Vừa tạo bởi Gemini AI'
+      createdAt: 'Vừa tạo bởi EduAdvisor AI'
     },
     {
       id: `form_gen_3_${seed}`,
@@ -939,7 +939,7 @@ export function generateAiExerciseForms(
       description: 'Chinh phục bài toán tham số, cực trị hàm số và phương pháp giải nhanh.',
       formType: 'advanced_9plus',
       exercises: defaultExs,
-      createdAt: 'Vừa tạo bởi Gemini AI'
+      createdAt: 'Vừa tạo bởi EduAdvisor AI'
     }
   ];
 

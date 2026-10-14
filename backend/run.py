@@ -17,7 +17,7 @@ os.environ["PYTHONPATH"] = current_dir
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("  EduAdvisor AI - Backend FastAPI Server (Port 8000)")
-    print("  API Docs (Swagger UI): http://127.0.0.1:8000/docs")
+    print("  EduAdvisor AI - Backend FastAPI Server (Port 8002)")
+    print("  API Docs (Swagger UI): http://127.0.0.1:8002/docs")
     print("=" * 60)
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8002, reload=False)

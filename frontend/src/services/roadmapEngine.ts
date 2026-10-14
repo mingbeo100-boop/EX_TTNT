@@ -1153,3 +1153,6 @@ export function generateRoadmap(params: GenerateRoadmapParams): RoadmapData {
     schedule
   };
 }
+
+// Re-export full pedagogical roadmap catalog & adaptive generator
+export * from './roadmapCatalog';

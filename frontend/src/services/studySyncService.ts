@@ -1565,7 +1565,7 @@ class StudySyncService {
       const defaultForm: ExerciseForm = {
         id: `form_default_${Date.now()}`,
         title: `Form 1: Thực chiến Toàn diện (${exercises.length} câu)`,
-        description: 'Bộ bài tập thực chiến đa dạng được AI Gemini khởi tạo riêng cho chuyên đề này.',
+        description: 'Bộ bài tập thực chiến đa dạng được EduAdvisor AI khởi tạo riêng cho chuyên đề này.',
         formType: 'comprehensive',
         exercises
       };

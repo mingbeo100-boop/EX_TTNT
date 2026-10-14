@@ -1,5 +1,5 @@
-Link EduAdvisor AI Online: https://slope-respondent-thermal-dale.trycloudflare.com
-Thời gian tạo: 2026-10-01 08:50:06
-Link Wi-Fi / LAN: http://10.60.29.114:3000
+Link EduAdvisor AI Online: https://brokers-identity-hourly-publications.trycloudflare.com
+Thời gian tạo: 2026-10-14 17:42:04
+Link Wi-Fi / LAN: http://192.168.1.12:3000
 Link Localhost: http://localhost:3000
 Link API Docs: http://127.0.0.1:8000/docs

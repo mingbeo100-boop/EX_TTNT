@@ -8,16 +8,25 @@ import { RoadmapPage } from './pages/RoadmapPage';
 import { LoginPage } from './pages/LoginPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminPage } from './pages/AdminPage';
+import { AuthGateModal } from './components/AuthGateModal';
 import { api } from './services/api';
+
+const PROTECTED_PAGES: PageType[] = ['roadmap', 'dashboard', 'chat', 'profile', 'admin'];
 
 export const App: React.FC = () => {
   const savedUser = api.getUser();
-  // Mặc định luôn ưu tiên mở 'landing' (Trang chủ) đầu tiên khi người dùng nhấn vào link web
+  const initialLoggedIn = !!savedUser;
+
+  // Mặc định luôn ưu tiên mở 'landing' (Trang chủ) đầu tiên khi người dùng mới nhấn vào link web
   const getInitialPage = (): PageType => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace('#', '').trim().toLowerCase();
-      if (hash && ['landing', 'dashboard', 'chat', 'roadmap', 'profile', 'admin', 'login'].includes(hash)) {
-        return hash as PageType;
+      if (hash === 'login') return 'login';
+      if (hash && PROTECTED_PAGES.includes(hash as PageType)) {
+        if (api.isLoggedIn()) {
+          return hash as PageType;
+        }
+        return 'landing';
       }
     }
     return 'landing';
@@ -25,8 +34,13 @@ export const App: React.FC = () => {
 
   const [currentPage, setCurrentPage] = useState<PageType>(getInitialPage());
   const [chatPrompt, setChatPrompt] = useState<string>('');
-  const [currentUser, setCurrentUser] = useState<string>(savedUser?.full_name || 'Học viên');
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(!!savedUser);
+  const [currentUser, setCurrentUser] = useState<string>(savedUser?.full_name || 'Khách');
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(initialLoggedIn);
+
+  // Auth Gate Modal State (Ràng buộc đăng nhập với thông điệp hướng dẫn rõ ràng)
+  const [authGateOpen, setAuthGateOpen] = useState<boolean>(false);
+  const [authGateTarget, setAuthGateTarget] = useState<PageType>('roadmap');
+  const [pendingRedirect, setPendingRedirect] = useState<PageType | null>(null);
 
   useEffect(() => {
     // Check saved session in localStorage
@@ -39,11 +53,22 @@ export const App: React.FC = () => {
       setCurrentUser('Khách');
     }
 
+    // Nếu người dùng mới gõ trực tiếp URL hash của trang bảo vệ khi chưa đăng nhập
+    const initialHash = window.location.hash.replace('#', '').trim().toLowerCase();
+    if (initialHash && PROTECTED_PAGES.includes(initialHash as PageType) && !api.isLoggedIn()) {
+      setAuthGateTarget(initialHash as PageType);
+      setPendingRedirect(initialHash as PageType);
+      setAuthGateOpen(true);
+    }
+
     const handleUserUpdate = (e: any) => {
       const updated = e.detail || api.getUser();
       if (updated) {
         setCurrentUser(updated.full_name || 'Học viên');
         setIsLoggedIn(true);
+      } else {
+        setIsLoggedIn(false);
+        setCurrentUser('Khách');
       }
     };
     window.addEventListener('eduadvisor_user_updated', handleUserUpdate);
@@ -52,7 +77,7 @@ export const App: React.FC = () => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '').trim().toLowerCase();
       if (hash && ['landing', 'dashboard', 'chat', 'roadmap', 'profile', 'admin', 'login'].includes(hash)) {
-        setCurrentPage(hash as PageType);
+        navigateTo(hash as PageType);
       }
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -76,6 +101,18 @@ export const App: React.FC = () => {
     if (initialPrompt !== undefined) {
       setChatPrompt(initialPrompt);
     }
+
+    // RÀNG BUỘC ĐĂNG NHẬP: Nếu bấm vào trang bảo vệ khi chưa đăng nhập
+    const isProtected = PROTECTED_PAGES.includes(page);
+    const userLoggedIn = api.isLoggedIn();
+
+    if (isProtected && !userLoggedIn) {
+      setAuthGateTarget(page);
+      setPendingRedirect(page);
+      setAuthGateOpen(true);
+      return;
+    }
+
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     try {
@@ -93,16 +130,30 @@ export const App: React.FC = () => {
     api.logPageVisit('/' + (page === 'landing' ? '' : page));
   };
 
+  const handleAuthGateGoToLogin = () => {
+    setAuthGateOpen(false);
+    setCurrentPage('login');
+    try {
+      window.history.pushState(null, '', '#login');
+    } catch {}
+  };
+
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user.full_name || 'Học viên Google');
     setIsLoggedIn(true);
+    setAuthGateOpen(false);
+
+    // Tự động chuyển đến trang người dùng muốn vào trước đó (ví dụ: roadmap)
+    const target = pendingRedirect || 'dashboard';
+    setPendingRedirect(null);
+    navigateTo(target);
   };
 
   const handleLogout = () => {
     api.clearUser();
     setIsLoggedIn(false);
     setCurrentUser('Khách');
-    setCurrentPage('login');
+    setCurrentPage('landing');
   };
 
   return (
@@ -128,6 +179,14 @@ export const App: React.FC = () => {
           />
         )}
       </main>
+
+      {/* Cửa sổ hướng dẫn Ràng buộc Đăng nhập khi bấm vào các trang như Lộ trình */}
+      <AuthGateModal
+        isOpen={authGateOpen}
+        targetPage={authGateTarget}
+        onClose={() => setAuthGateOpen(false)}
+        onGoToLogin={handleAuthGateGoToLogin}
+      />
     </div>
   );
 };

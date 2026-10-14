@@ -31,10 +31,11 @@ class LLMService:
         # 2. Gọi Gemini API Streaming thực sự (SSE) với phản hồi thời gian thực
         if self.api_key:
             candidate_models = [
+                "gemini-3.5-flash-lite",
+                "gemini-3.5-flash",
+                "gemini-3.6-flash",
                 "gemini-3.8-flash",
-                self.model,
-                "gemini-3.1-flash-lite",
-                "gemini-flash-lite-latest"
+                self.model
             ]
             seen = set()
             models_to_try = [m for m in candidate_models if m and not (m in seen or seen.add(m))]

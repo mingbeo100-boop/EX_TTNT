@@ -28,7 +28,8 @@ import {
   Atom,
   Zap,
   Compass,
-  Brain
+  Brain,
+  Lock
 } from 'lucide-react';
 import { api } from '../services/api';
 import { studySyncService } from '../services/studySyncService';
@@ -110,8 +111,8 @@ const PRESET_AVATARS = [
 export const Navbar: React.FC<NavbarProps> = ({ 
   currentPage, 
   onPageChange, 
-  currentUser: initialUserName = 'Học viên',
-  isLoggedIn = true 
+  currentUser: initialUserName = 'Khách',
+  isLoggedIn = false 
 }) => {
   const [user, setUser] = useState<User | null>(api.getUser());
   const [userName, setUserName] = useState<string>(user?.full_name || initialUserName);
@@ -150,6 +151,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         setUser(updated);
         setUserName(updated.full_name || 'Học viên');
         setUserAvatar(updated.avatar_url);
+      } else {
+        setUser(null);
+        setUserName('Khách');
+        setUserAvatar(undefined);
       }
     };
 
@@ -410,6 +415,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
               <span>Dashboard</span>
+              {!isLoggedIn && <Lock className="w-2.5 h-2.5 text-slate-400 shrink-0" />}
             </button>
 
             <button
@@ -421,8 +427,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <MessageSquareText className="w-3.5 h-3.5 shrink-0" />
-              <span>Chat Cố vấn AI</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <span>Cố vấn AI</span>
+              {!isLoggedIn ? (
+                <Lock className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+              ) : (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              )}
             </button>
 
             <button
@@ -435,6 +445,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Milestone className="w-3.5 h-3.5 shrink-0" />
               <span>Lộ trình học tập</span>
+              {!isLoggedIn && <Lock className="w-2.5 h-2.5 text-slate-400 shrink-0" />}
             </button>
 
             <button
@@ -447,6 +458,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <UserIcon className="w-3.5 h-3.5 shrink-0" />
               <span>Hồ sơ cá nhân</span>
+              {!isLoggedIn && <Lock className="w-2.5 h-2.5 text-slate-400 shrink-0" />}
             </button>
 
             {isAuthorizedAdmin && (
@@ -685,9 +697,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             ) : (
               <button
                 onClick={() => onPageChange('login')}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs transition-colors shrink-0 whitespace-nowrap"
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all active:scale-95 shrink-0 whitespace-nowrap flex items-center gap-1.5 cursor-pointer"
               >
-                Đăng nhập
+                <span>Đăng nhập</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
 
@@ -707,38 +720,50 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
           <button
             onClick={() => onPageChange('dashboard')}
-            className={`flex flex-col items-center text-[10px] font-semibold gap-0.5 py-1 px-2 rounded-lg ${
+            className={`flex flex-col items-center text-[10px] font-semibold gap-0.5 py-1 px-2 rounded-lg relative ${
               currentPage === 'dashboard' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-500'
             }`}
           >
-            <LayoutDashboard className="w-4 h-4" />
+            <div className="relative">
+              <LayoutDashboard className="w-4 h-4" />
+              {!isLoggedIn && <Lock className="w-2.5 h-2.5 absolute -top-1 -right-2 text-slate-400" />}
+            </div>
             <span>Dashboard</span>
           </button>
           <button
             onClick={() => onPageChange('chat')}
-            className={`flex flex-col items-center text-[10px] font-semibold gap-0.5 py-1 px-2 rounded-lg ${
+            className={`flex flex-col items-center text-[10px] font-semibold gap-0.5 py-1 px-2 rounded-lg relative ${
               currentPage === 'chat' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-500'
             }`}
           >
-            <MessageSquareText className="w-4 h-4" />
+            <div className="relative">
+              <MessageSquareText className="w-4 h-4" />
+              {!isLoggedIn && <Lock className="w-2.5 h-2.5 absolute -top-1 -right-2 text-slate-400" />}
+            </div>
             <span>Chat AI</span>
           </button>
           <button
             onClick={() => onPageChange('roadmap')}
-            className={`flex flex-col items-center text-[10px] font-semibold gap-0.5 py-1 px-2 rounded-lg ${
+            className={`flex flex-col items-center text-[10px] font-semibold gap-0.5 py-1 px-2 rounded-lg relative ${
               currentPage === 'roadmap' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-500'
             }`}
           >
-            <Milestone className="w-4 h-4" />
+            <div className="relative">
+              <Milestone className="w-4 h-4" />
+              {!isLoggedIn && <Lock className="w-2.5 h-2.5 absolute -top-1 -right-2 text-slate-400" />}
+            </div>
             <span>Lộ trình</span>
           </button>
           <button
             onClick={() => onPageChange('profile')}
-            className={`flex flex-col items-center text-[10px] font-semibold gap-0.5 py-1 px-2 rounded-lg ${
+            className={`flex flex-col items-center text-[10px] font-semibold gap-0.5 py-1 px-2 rounded-lg relative ${
               currentPage === 'profile' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-500'
             }`}
           >
-            <UserIcon className="w-4 h-4" />
+            <div className="relative">
+              <UserIcon className="w-4 h-4" />
+              {!isLoggedIn && <Lock className="w-2.5 h-2.5 absolute -top-1 -right-2 text-slate-400" />}
+            </div>
             <span>Hồ sơ</span>
           </button>
         </div>
