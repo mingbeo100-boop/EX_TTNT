@@ -193,8 +193,8 @@ export const api = {
         body: JSON.stringify({ email })
       });
       return await res.json();
-    } catch {
-      return { status: 'success', message: `Mã xác nhận đã gửi tới ${email}` };
+    } catch (err: any) {
+      return { status: 'error', message: 'Không thể kết nối đến máy chủ gửi mail. Vui lòng kiểm tra lại kết nối mạng.' };
     }
   },
 

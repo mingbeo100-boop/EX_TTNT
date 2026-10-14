@@ -208,15 +208,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onLoginSuccess
     setIsLoading(true);
     setAuthError(null);
     try {
-      await api.sendOtp(cleanEmail);
+      const res = await api.sendOtp(cleanEmail);
       setIsLoading(false);
+      if (res && res.status === 'error') {
+        setAuthError(res.message || 'Không thể gửi email lúc này do máy chủ gửi mail quá tải. Vui lòng thử lại sau hoặc dùng tài khoản Demo.');
+        return;
+      }
       setAuthStep('verify_otp');
       setResendCountdown(60);
     } catch {
       setIsLoading(false);
-      // Khi gặp trục trặc mạng vẫn mở bước verify OTP để không khóa luồng
-      setAuthStep('verify_otp');
-      setResendCountdown(60);
+      setAuthError('Không thể kết nối đến máy chủ gửi email. Vui lòng kiểm tra lại kết nối mạng.');
     }
   };
 
@@ -561,10 +563,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onLoginSuccess
               <span>Kiểm tra hòm thư Gmail của bạn</span>
             </div>
             <p className="text-slate-600 leading-relaxed text-[11px]">
-              Mã bảo mật gồm 6 chữ số đã được gửi tự động từ máy chủ hệ thống (qua tài khoản gửi: <strong className="text-blue-900">mingbeo100@gmail.com</strong>) tới địa chỉ <strong className="text-blue-900">{googleEmail}</strong>.
+              Mã xác thực 6 số đã được gửi tự động tới địa chỉ <strong className="text-blue-900">{googleEmail}</strong>.
             </p>
+            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed">
+              ⚠️ <strong>Lưu ý quan trọng:</strong> Nếu không thấy ở Hộp thư chính (Primary), vui lòng kiểm tra thư mục <strong>Thư rác (Spam / Junk)</strong> hoặc tab <strong>Quảng cáo / Cập nhật (Promotions)</strong>.
+            </div>
             <div className="pt-2 border-t border-blue-200/60 flex items-center justify-between">
-              <span className="text-[11px] text-slate-500">Chưa thấy email?</span>
+              <button
+                type="button"
+                onClick={handleDirectLogin}
+                className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold underline"
+              >
+                Hoặc vào nhanh bằng tài khoản Demo
+              </button>
               <a
                 href="https://mail.google.com"
                 target="_blank"
@@ -572,7 +583,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onLoginSuccess
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold transition-colors shadow-2xs"
               >
                 <Mail className="w-3.5 h-3.5 text-blue-600" />
-                <span>Mở Hộp Thư Gmail ↗</span>
+                <span>Mở Gmail ↗</span>
               </a>
             </div>
           </div>

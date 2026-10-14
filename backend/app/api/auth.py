@@ -161,11 +161,29 @@ def send_real_email_otp(to_email: str, otp_code: str) -> bool:
         smtp_password = "iyemugjdkfgnitvc"
 
     try:
-        msg = MIMEMultipart()
+        from email.utils import formatdate, make_msgid
+
+        msg = MIMEMultipart("alternative")
         msg["From"] = f"EduAdvisor AI Platform <{smtp_user}>"
         msg["To"] = to_email
-        msg["Subject"] = f"[{otp_code}] Mã xác thực tài khoản - EduAdvisor AI"
+        msg["Reply-To"] = smtp_user
+        msg["Subject"] = f"[{otp_code}] Mã xác thực tài khoản EduAdvisor AI"
+        msg["Date"] = formatdate(localtime=True)
+        msg["Message-ID"] = make_msgid(domain="gmail.com")
 
+        # 1. Plain text version (Bắt buộc để bộ lọc Spam không đánh dấu rác)
+        plain_text = f"""Xin chào,
+
+Bạn đang thực hiện đăng nhập vào hệ sinh thái EduAdvisor AI Platform.
+Mã xác thực OTP của bạn là: {otp_code}
+
+Mã này có hiệu lực trong vòng 10 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.
+
+© 2026 EduAdvisor AI Platform.
+"""
+        msg.attach(MIMEText(plain_text, "plain", "utf-8"))
+
+        # 2. HTML version đẹp mắt
         body = f"""
         <html>
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #f8fafc;">
@@ -199,7 +217,7 @@ def send_real_email_otp(to_email: str, otp_code: str) -> bool:
         </body>
         </html>
         """
-        msg.attach(MIMEText(body, "html"))
+        msg.attach(MIMEText(body, "html", "utf-8"))
 
         # Ưu tiên kết nối SSL cổng 465 để tránh bị chặn bởi ISP/Tường lửa
         if smtp_port == 465:
