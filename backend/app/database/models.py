@@ -90,3 +90,18 @@ class AccessLog(Base):
     user_email = Column(String, nullable=True)
     user_agent = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class ArcadeScore(Base):
+    __tablename__ = "arcade_scores"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, nullable=True, index=True)
+    player_name = Column(String, nullable=False, index=True)
+    school = Column(String, nullable=True)
+    target_score = Column(String, nullable=True)
+    score = Column(Integer, nullable=False, index=True)
+    traps_destroyed = Column(Integer, default=0)
+    time_alive_str = Column(String, default="00:00")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+

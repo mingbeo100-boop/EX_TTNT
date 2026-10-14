@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api import auth, chat, roadmap, tasks, documents, admin
+from app.api import auth, chat, roadmap, tasks, documents, admin, arcade
 from app.database.session import init_db, SessionLocal
 from app.database.models import AccessLog
 from datetime import datetime
@@ -66,6 +66,7 @@ app.include_router(roadmap.router, prefix=settings.API_V1_STR)
 app.include_router(tasks.router, prefix=settings.API_V1_STR)
 app.include_router(documents.router, prefix=settings.API_V1_STR)
 app.include_router(admin.router, prefix=settings.API_V1_STR)
+app.include_router(arcade.router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 async def root():

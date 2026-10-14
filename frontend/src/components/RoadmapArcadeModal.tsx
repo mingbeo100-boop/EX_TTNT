@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { api } from '../services/api';
 import {
   Trophy,
   X,
@@ -40,6 +41,7 @@ export interface RoadmapArcadeModalProps {
 
 export interface LeaderboardPlayer {
   rank: number;
+  id?: string;
   name: string;
   school: string;
   targetScore: string;
@@ -213,6 +215,58 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
     } catch {}
     return INITIAL_LEADERBOARD;
   });
+
+  const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
+  const [leaderboardSyncNotice, setLeaderboardSyncNotice] = useState<string | null>(null);
+
+  // Tải danh sách Bảng Xếp Hạng thực tế từ máy chủ (của tất cả người chơi)
+  const fetchGlobalLeaderboard = useCallback(async () => {
+    setIsLoadingLeaderboard(true);
+    try {
+      const user = api.getUser();
+      let userName = '';
+      let userId = '';
+
+      if (user) {
+        userName = user.full_name || user.email || '';
+        userId = user.id || '';
+      } else {
+        userName = localStorage.getItem('eduadvisor_arcade_player_name') || '';
+        userId = localStorage.getItem('eduadvisor_arcade_guest_id') || '';
+      }
+
+      const params = new URLSearchParams();
+      if (userId) params.append('current_user_id', userId);
+      if (userName) params.append('current_player_name', userName);
+
+      const res = await fetch(`/api/arcade/leaderboard?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'success' && Array.isArray(data.leaderboard)) {
+          setLeaderboard(data.leaderboard);
+          try {
+            localStorage.setItem('eduadvisor_arcade_leaderboard', JSON.stringify(data.leaderboard));
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn('Lỗi khi kết nối Bảng Xếp Hạng máy chủ:', err);
+    } finally {
+      setIsLoadingLeaderboard(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchGlobalLeaderboard();
+    }
+  }, [isOpen, fetchGlobalLeaderboard]);
+
+  useEffect(() => {
+    if (activeTab === 'leaderboard') {
+      fetchGlobalLeaderboard();
+    }
+  }, [activeTab, fetchGlobalLeaderboard]);
 
   const [isMuted, setIsMuted] = useState(false);
   const [recentlyUnlocked, setRecentlyUnlocked] = useState<string[]>([]);
@@ -446,31 +500,50 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
     setTimeout(() => setShowCelebrationBanner(null), 2500);
   };
 
-  // Đồng bộ Leaderboard khi có kỷ lục mới
-  const syncLeaderboard = (finalScore: number, finalTraps: number, finalSecs: number) => {
-    const raw = localStorage.getItem('eduadvisor_user');
+  // Đồng bộ Leaderboard vào cơ sở dữ liệu hệ thống khi người chơi đạt điểm mới
+  const syncLeaderboard = async (finalScore: number, finalTraps: number, finalSecs: number) => {
+    const user = api.getUser();
     let userName = 'Bạn (Sĩ tử 2025)';
-    if (raw) {
-      try {
-        const u = JSON.parse(raw);
-        if (u.full_name) userName = u.full_name;
-      } catch {}
+    let userId: string | undefined = undefined;
+    let userSchool = targetSchool || 'Mục tiêu 27.5+';
+    let userTarget = targetScore || '28.0+';
+
+    if (user) {
+      if (user.full_name) userName = user.full_name;
+      else if (user.email) userName = user.email.split('@')[0];
+      if (user.id) userId = user.id;
+      if (user.profile?.school && user.profile.school !== 'Chưa cập nhật') {
+        userSchool = user.profile.school;
+      }
+      if (user.profile?.target_score) {
+        userTarget = user.profile.target_score;
+      }
+    } else {
+      let guestId = localStorage.getItem('eduadvisor_arcade_guest_id');
+      if (!guestId) {
+        guestId = 'guest_' + Math.random().toString(36).substring(2, 9);
+        localStorage.setItem('eduadvisor_arcade_guest_id', guestId);
+      }
+      userId = guestId;
+      const customName = localStorage.getItem('eduadvisor_arcade_player_name');
+      if (customName) userName = customName;
     }
 
     const currentBest = Math.max(finalScore, highScore);
     const newEntry: LeaderboardPlayer = {
       rank: 0,
-      name: `${userName}`,
-      school: targetSchool || 'Mục tiêu 27.5+',
-      targetScore: targetScore || '28.0+',
+      name: userName,
+      school: userSchool,
+      targetScore: userTarget,
       score: currentBest,
       trapsDestroyed: finalTraps,
       timeAliveStr: formatTime(finalSecs),
       isCurrentUser: true
     };
 
+    // Cập nhật giao diện tức thì (Optimistic update)
     setLeaderboard(prev => {
-      const others = prev.filter(p => !p.isCurrentUser);
+      const others = prev.filter(p => !p.isCurrentUser && p.name !== userName);
       const combined = [...others, newEntry].sort((a, b) => b.score - a.score);
       const ranked = combined.map((item, idx) => ({ ...item, rank: idx + 1 }));
       try {
@@ -478,6 +551,39 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
       } catch {}
       return ranked;
     });
+
+    // Lưu thực tế vào Database máy chủ của backend
+    try {
+      const res = await fetch('/api/arcade/score', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          player_name: userName,
+          school: userSchool,
+          target_score: userTarget,
+          score: currentBest,
+          traps_destroyed: finalTraps,
+          time_alive_str: formatTime(finalSecs)
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'success' && Array.isArray(data.leaderboard)) {
+          setLeaderboard(data.leaderboard);
+          try {
+            localStorage.setItem('eduadvisor_arcade_leaderboard', JSON.stringify(data.leaderboard));
+          } catch {}
+          setLeaderboardSyncNotice('🏆 Đã lưu kỷ lục vào Bảng Xếp Hạng toàn hệ thống!');
+          setTimeout(() => setLeaderboardSyncNotice(null), 3500);
+        }
+      }
+    } catch (err) {
+      console.warn('Lỗi khi lưu điểm lên máy chủ:', err);
+    }
   };
 
   // Bắt đầu màn chơi mới (Khởi đầu luôn với 3 mạng)
@@ -1868,10 +1974,22 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
                       <Trophy className="w-3.5 h-3.5" />
                       Top Cao Thủ Chinh Phục:
                     </span>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      Cập nhật liên tục
-                    </span>
+                    <button
+                      onClick={fetchGlobalLeaderboard}
+                      disabled={isLoadingLeaderboard}
+                      className="text-[10px] text-slate-400 hover:text-amber-300 font-mono flex items-center gap-1 cursor-pointer transition-colors bg-slate-800/80 hover:bg-slate-700/80 px-2 py-0.5 rounded-lg border border-slate-700/60"
+                      title="Bấm để cập nhật bảng xếp hạng toàn hệ thống mới nhất"
+                    >
+                      <RefreshCw className={`w-2.5 h-2.5 ${isLoadingLeaderboard ? 'animate-spin text-amber-400' : ''}`} />
+                      <span>{isLoadingLeaderboard ? 'Đang tải...' : 'Làm mới'}</span>
+                    </button>
                   </div>
+
+                  {leaderboardSyncNotice && (
+                    <div className="text-[10px] text-emerald-300 bg-emerald-950/60 border border-emerald-500/50 p-1.5 rounded-lg text-center animate-pulse">
+                      {leaderboardSyncNotice}
+                    </div>
+                  )}
 
                   <div className="space-y-1.5 max-h-[340px] overflow-y-auto pr-1">
                     {leaderboard.map((player) => {
@@ -1899,7 +2017,7 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
 
                       return (
                         <div
-                          key={player.rank}
+                          key={player.id ? `p-${player.id}` : `p-${player.rank}-${player.name}`}
                           className={`p-2.5 rounded-xl border flex items-center justify-between text-xs transition-all ${rowStyle}`}
                         >
                           <div className="flex items-center gap-2">

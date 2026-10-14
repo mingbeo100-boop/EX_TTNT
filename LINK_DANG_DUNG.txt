@@ -1,5 +1,5 @@
-Link EduAdvisor AI Online: https://qualify-minnesota-robinson-wellington.trycloudflare.com
-Thời gian tạo: 2026-10-14 22:10:56
+Link EduAdvisor AI Online: https://ethernet-practitioner-airport-importantly.trycloudflare.com
+Thời gian tạo: 2026-10-14 22:53:38
 Link Localhost: http://localhost:3000
 Link Wi-Fi / LAN: http://192.168.1.98:3000
 Link API Docs: http://127.0.0.1:8002/docs
