@@ -1,0 +1,41 @@
+========================================================================================
+                         THƯ MỤC BUILD & FILE THỰC THI CHẠY 1-CLICK
+                    DỰ ÁN: EDUADVISOR AI (MÃ NGUỒN DỰ ÁN: AI_EX)
+========================================================================================
+
+I. DANH SÁCH FILE CÓ TRONG THƯ MỤC /build:
+1. CHAY_CHAT_ONLINE.bat:
+   - Script tự động khởi chạy 1-Click thông minh cho toàn bộ hệ thống trên Windows.
+   - Tự động nhận diện Python (>= 3.10) và Node.js / npm trên máy tính của Giảng viên.
+   - Tự động phát hiện và cài đặt các thư viện thiếu (tự động pip install và npm install nếu chưa có node_modules khi vừa clone từ GitHub về).
+   - Tự động giải phóng cổng 8002 và 3000 nếu bị chiếm dụng.
+   - Tự động bật FastAPI Backend (Port 8002) và React Frontend (Port 3000).
+   - TỰ ĐỘNG MỞ TRÌNH DUYỆT WEB TẠI LINK LOCALHOST (http://localhost:3000) tức thì!
+   - Không bị phụ thuộc vào đường truyền mạng ngoài, giúp Giảng viên chấm thi nhanh và ổn định nhất.
+
+2. cloudflared.exe (Tích hợp tại thư mục gốc dự án):
+   - Công cụ hầm mạng bảo mật giúp chia sẻ link trực tiếp cho Giảng viên chấm thi
+     mà không cần mở port modem mạng.
+
+----------------------------------------------------------------------------------------
+II. CÁCH ĐÓNG GÓI RA FILE THỰC THI ĐỘC LẬP (.EXE NẾU CẦN NỘP BẢN DESKTOP ELECTRON):
+Nếu Giảng viên yêu cầu nộp file .exe hoàn chỉnh cho Desktop:
+1. Bước 1: Build Frontend:
+   $ cd frontend
+   $ npm run build
+   Thư mục dist/ sẽ được tạo ra chứa toàn bộ mã nguồn HTML/JS/CSS tối ưu hóa.
+
+2. Bước 2: Đóng gói với Electron / PyInstaller:
+   - Cách A: Dùng PyInstaller đóng gói Backend FastAPI thành file .exe:
+     $ pip install pyinstaller
+     $ pyinstaller --noconfirm --onedir --windowed --add-data "app;app" app/main.py
+   - Cách B: Dùng công cụ Web2Exe hoặc Nativefier tạo file .exe từ cổng localhost:3000:
+     $ npx nativefier --name "EduAdvisorAI" "http://localhost:3000" --icon icon.ico
+
+----------------------------------------------------------------------------------------
+III. CÁCH CHẠY THỬ NHANH NHẤT KHI TẢI DỰ ÁN TỪ GITHUB VỀ:
+1. Tải hoặc Clone dự án từ GitHub về máy tính.
+2. Nhấp đúp vào file CHAY_CHAT_ONLINE.bat (ở thư mục gốc hoặc trong thư mục build/).
+3. Hệ thống sẽ tự động cấu hình môi trường, cài đặt các gói cần thiết và tự mở trình duyệt web!
+4. Bấm nút "Dùng thử nhanh không cần mật khẩu" trên màn hình để trải nghiệm ngay lập tức.
+========================================================================================

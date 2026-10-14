@@ -129,11 +129,12 @@ def is_url_ready(url, timeout=1.5):
         return False
 
 def start_backend():
-    """Đảm bảo Backend FastAPI (Port 8000) đang chạy bản mới nhất."""
+    """Đảm bảo Backend FastAPI (Port 8002) đang chạy bản mới nhất."""
+    free_port_if_stuck(8002)
     free_port_if_stuck(8000)
     time.sleep(0.3)
 
-    print("  [Backend]  Đang khởi động Backend FastAPI (Port 8000)...")
+    print("  [Backend]  Đang khởi động Backend FastAPI (Port 8002)...")
     backend_dir = os.path.join(CURRENT_DIR, "backend")
     run_file = os.path.join(backend_dir, "run.py")
     
@@ -154,7 +155,7 @@ def start_backend():
 
     for _ in range(25):
         time.sleep(0.5)
-        if is_url_ready("http://127.0.0.1:8000/api/health"):
+        if is_url_ready("http://127.0.0.1:8002/api/health"):
             print("  [Backend]  Khởi động thành công! ✅")
             return p
             
@@ -166,8 +167,17 @@ def start_frontend():
     free_port_if_stuck(3000)
     time.sleep(0.3)
 
-    print("  [Frontend] Đang khởi động React Vite (Port 3000)...")
     frontend_dir = os.path.join(CURRENT_DIR, "frontend")
+    node_modules_dir = os.path.join(frontend_dir, "node_modules")
+
+    # Tự động chạy npm install nếu chưa có node_modules khi tải từ GitHub về
+    if not os.path.exists(node_modules_dir):
+        print("  [Frontend] Chưa có thư mục node_modules. Đang tự động cài đặt gói npm...")
+        cmd_install = "npm.cmd install" if sys.platform == "win32" else "npm install"
+        subprocess.run(cmd_install, shell=True, cwd=frontend_dir)
+        print("  [Frontend] Cài đặt gói npm hoàn tất! ✅")
+
+    print("  [Frontend] Đang khởi động React Vite (Port 3000)...")
     
     creation_flags = 0
     if sys.platform == "win32":
@@ -191,13 +201,28 @@ def start_frontend():
     print("  [Frontend] Đang chạy ngầm.")
     return p
 
+def disable_quickedit():
+    """Tắt chế độ QuickEdit của Windows Console để chống việc nhấp chuột làm treo tiến trình (Select Mode)."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            hStdin = kernel32.GetStdHandle(-10) # STD_INPUT_HANDLE
+            mode = ctypes.c_ulong()
+            if kernel32.GetConsoleMode(hStdin, ctypes.byref(mode)):
+                # ENABLE_QUICK_EDIT_MODE = 0x0040, ENABLE_EXTENDED_FLAGS = 0x0080
+                new_mode = (mode.value & ~0x0040) | 0x0080
+                kernel32.SetConsoleMode(hStdin, new_mode)
+        except Exception:
+            pass
+
 def start_cloudflare_tunnel(port=3000):
     """Chạy cloudflared tunnel để đưa web ra Internet."""
     if not os.path.exists(CLOUDFLARED_EXE):
-        print(f"❌ Không tìm thấy file {CLOUDFLARED_EXE}!")
+        print(f"  [Online] Không tìm thấy file {CLOUDFLARED_EXE}. Bỏ qua tunnel.")
         return None, None
 
-    print(f"\n🚀 Đang tạo Cloudflare Tunnel cho cổng {port}...")
+    print(f"\n🚀 Đang tạo Cloudflare Tunnel (chia sẻ Online)", end="", flush=True)
     kill_dangling_processes()
 
     creation_flags = 0
@@ -224,77 +249,100 @@ def start_cloudflare_tunnel(port=3000):
 
     tunnel_url = None
     start_time = time.time()
+    last_dot = time.time()
     url_pattern = re.compile(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com')
 
-    while time.time() - start_time < 35:
+    while time.time() - start_time < 25:
         if proc.poll() is not None:
-            print("❌ Tiến trình cloudflared đã dừng đột ngột!")
+            print(" ❌")
             break
 
+        if time.time() - last_dot >= 1.0:
+            print(".", end="", flush=True)
+            last_dot = time.time()
+
         try:
-            line = q.get(timeout=0.5)
+            line = q.get(timeout=0.2)
             match = url_pattern.search(line)
             if match:
                 tunnel_url = match.group(0)
+                print(" ✅")
                 break
         except queue.Empty:
             continue
 
+    if not tunnel_url:
+        print(" (chưa nhận được link)")
+
     return proc, tunnel_url
 
+def ensure_dependencies():
+    """Kiểm tra và tự động cài đặt thư viện thiếu nếu mới clone từ GitHub về."""
+    try:
+        import fastapi
+        import uvicorn
+        import pydantic
+    except ImportError:
+        print("  [Backend] Phát hiện thiếu thư viện Python. Đang tự động cài đặt từ requirements.txt...")
+        req_path = os.path.join(CURRENT_DIR, "backend", "requirements.txt")
+        subprocess.run([sys.executable, "-m", "pip", "install", "-r", req_path])
+        print("  [Backend] Cài đặt thư viện Python hoàn tất! ✅\n")
+
 def main():
+    # Vô hiệu hóa QuickEdit mode để nhấp chuột không làm đứng cửa sổ cmd
+    disable_quickedit()
+
     print("=" * 68)
-    print("  🎓 EduAdvisor AI - TỰ ĐỘNG KHỞI CHẠY ONLINE VỚI CLOUDFLARE")
+    print("  🎓 EduAdvisor AI - TỰ ĐỘNG KHỞI CHẠY HỆ THỐNG (CLOUDFLARE ONLINE)")
     print("=" * 68)
+
+    # 0. Tự động kiểm tra gói thư viện
+    ensure_dependencies()
 
     # 1. Dọn dẹp tiến trình cũ
     kill_dangling_processes()
 
-    # 2. Kiểm tra internet
-    wait_for_internet()
-
-    # 3. Khởi động Backend
+    # 2. Khởi động Backend
     start_backend()
 
-    # 4. Khởi động Frontend
+    # 3. Khởi động Frontend
     start_frontend()
-
-    # 5. Tạo Cloudflare Tunnel
-    proc, tunnel_url = start_cloudflare_tunnel(port=3000)
 
     lan_ip = get_lan_ip()
 
+    # 4. Khởi tạo Cloudflare Tunnel
+    proc, tunnel_url = start_cloudflare_tunnel(port=3000)
+
     if tunnel_url:
         print("\n" + "=" * 68)
-        print("  🎉 CHÚC MỪNG! WEBSITE CỦA BẠN ĐÃ ONLINE TOÀN CẦU:")
+        print("  🎉 WEBSITE ĐÃ ĐƯỢC MỞ TRÊN TRÌNH DUYỆT VỚI LINK CLOUDFLARE:")
         print(f"  👉 [Online Link]  {tunnel_url}")
-        print(f"  👉 [Wi-Fi/LAN]    http://{lan_ip}:3000")
         print(f"  👉 [Localhost]   http://localhost:3000")
-        print(f"  👉 [Swagger API] http://127.0.0.1:8000/docs")
+        print(f"  👉 [Wi-Fi/LAN]    http://{lan_ip}:3000")
+        print(f"  👉 [Swagger API] http://127.0.0.1:8002/docs")
         print("=" * 68)
         
         # Lưu vào file LINK_DANG_DUNG.txt
         with open(LINK_FILE, "w", encoding="utf-8") as f:
             f.write(f"Link EduAdvisor AI Online: {tunnel_url}\n")
             f.write(f"Thời gian tạo: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"Link Wi-Fi / LAN: http://{lan_ip}:3000\n")
             f.write(f"Link Localhost: http://localhost:3000\n")
-            f.write(f"Link API Docs: http://127.0.0.1:8000/docs\n")
+            f.write(f"Link Wi-Fi / LAN: http://{lan_ip}:3000\n")
+            f.write(f"Link API Docs: http://127.0.0.1:8002/docs\n")
 
         # Copy vào clipboard
         if copy_to_clipboard(tunnel_url):
             print("  📋 Đã tự động sao chép link Cloudflare vào bộ nhớ tạm (Clipboard)!")
 
-        # Mở trên trình duyệt
-        print("  🌐 Đang tự động mở link trên trình duyệt...")
+        # Mở TRÌNH DUYỆT BẰNG LINK CLOUDFLARE
+        print(f"  🌐 Đang tự động mở link Cloudflare trên trình duyệt...")
         webbrowser.open(tunnel_url)
     else:
-        print("\n⚠️ Không lấy được link Cloudflare. Bạn vẫn có thể dùng link nội bộ:")
-        print(f"  👉 Local: http://localhost:3000")
-        print(f"  👉 Wi-Fi: http://{lan_ip}:3000")
+        print("\n⚠️ Không lấy được link Cloudflare. Đang mở qua Localhost:")
+        print(f"  👉 Localhost: http://localhost:3000")
         webbrowser.open("http://localhost:3000")
 
-    print("\n💡 Giữ cửa sổ này mở để duy trì web online. Nhấn Ctrl+C để dừng.")
+    print("\n💡 Giữ cửa sổ này mở để duy trì ứng dụng hoạt động. Nhấn Ctrl+C để dừng.")
     
     try:
         while True:
