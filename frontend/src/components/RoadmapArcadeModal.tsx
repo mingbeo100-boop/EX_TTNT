@@ -21,7 +21,9 @@ import {
   Users,
   Medal,
   Star,
-  ChevronRight
+  ChevronRight,
+  Crosshair,
+  Radio
 } from 'lucide-react';
 
 export interface RoadmapArcadeModalProps {
@@ -46,6 +48,96 @@ export interface LeaderboardPlayer {
   timeAliveStr: string;
   isCurrentUser?: boolean;
 }
+
+// 6 Loại đạn vũ khí tối tân
+export type WeaponType =
+  | 'twin_rapid'        // [1] Tia Đôi Siêu Thanh
+  | 'triple_spread'     // [2] Phân Tán 3 Hướng
+  | 'storm_penta'       // [3] Bão Đạn 5 Tia
+  | 'pierce_lightning'  // [4] Lôi Điện Xuyên Phá
+  | 'homing_missile'    // [5] Tên Lửa Tầm Nhiệt
+  | 'plasma_blast';     // [6] Đại Pháo Plasma Nổ Lan
+
+export interface WeaponConfig {
+  id: WeaponType;
+  keyNum: string;
+  name: string;
+  shortName: string;
+  color: string;
+  coreColor: string;
+  cooldown: number;
+  desc: string;
+  iconText: string;
+}
+
+export const WEAPON_CONFIGS: Record<WeaponType, WeaponConfig> = {
+  twin_rapid: {
+    id: 'twin_rapid',
+    keyNum: '1',
+    name: 'Tia Đôi Siêu Thanh',
+    shortName: '⚡ TIA ĐÔI',
+    color: '#38bdf8',
+    coreColor: '#ffffff',
+    cooldown: 5, // Bắn liên thanh cực nhanh (12 phát/s)
+    desc: '2 tia laser song song tốc độ cao, bắn liên tục dày đặc',
+    iconText: '⚡'
+  },
+  triple_spread: {
+    id: 'triple_spread',
+    keyNum: '2',
+    name: 'Phân Tán 3 Hướng',
+    shortName: '🔮 3 TIA QUẠT',
+    color: '#c084fc',
+    coreColor: '#f472b6',
+    cooldown: 6,
+    desc: '3 tia tím neon xòe quạt 25°, quét sạch 2 bên sườn',
+    iconText: '🔮'
+  },
+  storm_penta: {
+    id: 'storm_penta',
+    keyNum: '3',
+    name: 'Bão Đạn 5 Tia',
+    shortName: '🌟 5 TIA BÃO TỐ',
+    color: '#fbbf24',
+    coreColor: '#fb923c',
+    cooldown: 6,
+    desc: '5 tia vàng kim hoàng gia phủ kín toàn bộ màn hình',
+    iconText: '🌟'
+  },
+  pierce_lightning: {
+    id: 'pierce_lightning',
+    keyNum: '4',
+    name: 'Lôi Điện Xuyên Phá',
+    shortName: '⚡ LÔI ĐIỆN XUYÊN',
+    color: '#34d399',
+    coreColor: '#a7f3d0',
+    cooldown: 7,
+    desc: 'Tia sét xanh lục bảo xuyên qua nhiều cạm bẫy liên tiếp',
+    iconText: '⚡'
+  },
+  homing_missile: {
+    id: 'homing_missile',
+    keyNum: '5',
+    name: 'Tên Lửa Tầm Nhiệt',
+    shortName: '🚀 TÊN LỬA TỰ DÒ',
+    color: '#f87171',
+    coreColor: '#fbbf24',
+    cooldown: 8,
+    desc: '2 tên lửa tự động bẻ cong đường đạn truy kích bẫy',
+    iconText: '🚀'
+  },
+  plasma_blast: {
+    id: 'plasma_blast',
+    keyNum: '6',
+    name: 'Đại Pháo Plasma Nổ Lan',
+    shortName: '💥 PHÁO PLASMA AOE',
+    color: '#facc15',
+    coreColor: '#ffffff',
+    cooldown: 9,
+    desc: 'Cầu năng lượng khổng lồ phát nổ lan tỏa bán kính 75px',
+    iconText: '💥'
+  }
+};
 
 // Bảng xếp hạng khởi tạo mặc định các thủ khoa trường Chuyên
 const INITIAL_LEADERBOARD: LeaderboardPlayer[] = [
@@ -95,7 +187,6 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [gameState, setGameState] = useState<'intro' | 'playing' | 'gameover' | 'victory'>('intro');
-  const [gameMode, setGameMode] = useState<'endless' | 'survival'>('endless');
   const [activeTab, setActiveTab] = useState<'badges' | 'leaderboard'>('badges');
   const [score, setScore] = useState(0);
   const [trapsDestroyed, setTrapsDestroyed] = useState(0);
@@ -103,6 +194,9 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
   const [combo, setCombo] = useState(0);
   const [survivalSeconds, setSurvivalSeconds] = useState(0);
   const [reviveCount, setReviveCount] = useState(0);
+  const [currentWeaponState, setCurrentWeaponState] = useState<WeaponType>('twin_rapid');
+  const [weaponTimeRemaining, setWeaponTimeRemaining] = useState<number>(0);
+  const [currentLivesState, setCurrentLivesState] = useState<number>(3);
 
   const [highScore, setHighScore] = useState(() => {
     try {
@@ -142,14 +236,24 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
     playerY: 480,
     playerWidth: 44,
     playerHeight: 44,
-    playerSpeed: 7,
-    lives: 999, // Endless = 999; Survival = 3
+    playerSpeed: 7.5,
+    lives: 3, // Bắt đầu mỗi lần chơi luôn có 3 mạng
+    maxLives: 5,
     invincibleTime: 0,
     shieldActive: false,
     shieldTimer: 0,
-    tripleLaserTimer: 0,
     bombs: 1,
-    lasers: [] as Array<{ x: number; y: number; vx: number; vy: number }>,
+    currentWeapon: 'twin_rapid' as WeaponType,
+    weaponTimer: 0, // Thời gian hiệu lực vũ khí đặc biệt (frames)
+    lasers: [] as Array<{
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      type: WeaponType;
+      radius?: number;
+      pierceLeft?: number;
+    }>,
     enemies: [] as Array<{
       id: number;
       x: number;
@@ -167,10 +271,11 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
       y: number;
       radius: number;
       vy: number;
-      type: 'normal' | 'rare' | 'vdc' | 'shield' | 'heart' | 'triple' | 'bomb';
+      type: 'normal' | 'rare' | 'vdc' | 'shield' | 'heart' | 'bomb' | 'wp_triple' | 'wp_penta' | 'wp_lightning' | 'wp_homing' | 'wp_plasma';
       label: string;
       points: number;
       color: string;
+      weaponId?: WeaponType;
     }>,
     particles: [] as Array<{
       x: number;
@@ -182,7 +287,7 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
       color: string;
       size: number;
     }>,
-    stars: [] as Array<{ x: number; y: number; speed: number; size: number; alpha: number }>,
+    stars: [] as Array<{ x: number; y: number; baseSpeed: number; size: number; alpha: number }>,
     stationProgress: 0,
     stationIndex: 1,
     spawnTimer: 0,
@@ -199,7 +304,7 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
   };
 
   // Sound Synthesizer via Web Audio API
-  const playSound = (type: 'laser' | 'orb' | 'explode' | 'shield' | 'badge' | 'hit' | 'heal' | 'powerup' | 'bomb') => {
+  const playSound = (type: 'laser' | 'orb' | 'explode' | 'shield' | 'badge' | 'hit' | 'heal' | 'powerup' | 'bomb' | 'plasma_blast') => {
     if (isMuted) return;
     try {
       if (!audioCtxRef.current) {
@@ -219,37 +324,45 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
 
       if (type === 'laser') {
         osc.type = 'triangle';
-        osc.frequency.setValueAtTime(900, now);
-        osc.frequency.exponentialRampToValueAtTime(260, now + 0.1);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.exponentialRampToValueAtTime(320, now + 0.08);
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
         osc.start(now);
-        osc.stop(now + 0.1);
+        osc.stop(now + 0.08);
       } else if (type === 'orb') {
         osc.type = 'sine';
         osc.frequency.setValueAtTime(523.25, now);
-        osc.frequency.setValueAtTime(659.25, now + 0.05);
-        osc.frequency.setValueAtTime(783.99, now + 0.1);
+        osc.frequency.setValueAtTime(659.25, now + 0.04);
+        osc.frequency.setValueAtTime(783.99, now + 0.08);
         gain.gain.setValueAtTime(0.25, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.16);
         osc.start(now);
-        osc.stop(now + 0.2);
+        osc.stop(now + 0.16);
       } else if (type === 'explode') {
         osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(160, now);
-        osc.frequency.exponentialRampToValueAtTime(35, now + 0.25);
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 0.22);
         gain.gain.setValueAtTime(0.3, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.22);
         osc.start(now);
-        osc.stop(now + 0.25);
+        osc.stop(now + 0.22);
+      } else if (type === 'plasma_blast') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.35);
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+        osc.start(now);
+        osc.stop(now + 0.35);
       } else if (type === 'shield') {
         osc.type = 'sine';
         osc.frequency.setValueAtTime(320, now);
-        osc.frequency.linearRampToValueAtTime(950, now + 0.25);
+        osc.frequency.linearRampToValueAtTime(950, now + 0.22);
         gain.gain.setValueAtTime(0.25, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.22);
         osc.start(now);
-        osc.stop(now + 0.25);
+        osc.stop(now + 0.22);
       } else if (type === 'heal') {
         [440, 554.37, 659.25, 880].forEach((f, idx) => {
           const subOsc = ctx.createOscillator();
@@ -259,14 +372,14 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
           subOsc.type = 'sine';
           subOsc.frequency.setValueAtTime(f, now + idx * 0.04);
           subGain.gain.setValueAtTime(0.2, now + idx * 0.04);
-          subGain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.04 + 0.15);
+          subGain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.04 + 0.14);
           subOsc.start(now + idx * 0.04);
-          subOsc.stop(now + idx * 0.04 + 0.15);
+          subOsc.stop(now + idx * 0.04 + 0.14);
         });
       } else if (type === 'powerup') {
         osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(260, now);
-        osc.frequency.exponentialRampToValueAtTime(1050, now + 0.22);
+        osc.frequency.setValueAtTime(280, now);
+        osc.frequency.exponentialRampToValueAtTime(1150, now + 0.22);
         gain.gain.setValueAtTime(0.25, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.22);
         osc.start(now);
@@ -287,20 +400,20 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
           subOsc.connect(subGain);
           subGain.connect(ctx.destination);
           subOsc.type = 'triangle';
-          subOsc.frequency.setValueAtTime(f, now + idx * 0.08);
-          subGain.gain.setValueAtTime(0.25, now + idx * 0.08);
-          subGain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.08 + 0.25);
-          subOsc.start(now + idx * 0.08);
-          subOsc.stop(now + idx * 0.08 + 0.25);
+          subOsc.frequency.setValueAtTime(f, now + idx * 0.07);
+          subGain.gain.setValueAtTime(0.25, now + idx * 0.07);
+          subGain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.07 + 0.22);
+          subOsc.start(now + idx * 0.07);
+          subOsc.stop(now + idx * 0.07 + 0.22);
         });
       } else if (type === 'hit') {
         osc.type = 'square';
-        osc.frequency.setValueAtTime(120, now);
-        osc.frequency.exponentialRampToValueAtTime(60, now + 0.14);
+        osc.frequency.setValueAtTime(130, now);
+        osc.frequency.exponentialRampToValueAtTime(60, now + 0.12);
         gain.gain.setValueAtTime(0.3, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.14);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
         osc.start(now);
-        osc.stop(now + 0.14);
+        osc.stop(now + 0.12);
       }
     } catch {}
   };
@@ -312,12 +425,25 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
       stars.push({
         x: Math.random() * width,
         y: Math.random() * height,
-        speed: 0.6 + Math.random() * 2.8,
+        baseSpeed: 0.6 + Math.random() * 2.5,
         size: 1 + Math.random() * 2.2,
         alpha: 0.3 + Math.random() * 0.7
       });
     }
     return stars;
+  };
+
+  // Kích hoạt đổi vũ khí trực tiếp
+  const switchWeapon = (weapon: WeaponType, durationSeconds = 20) => {
+    const eng = engineRef.current;
+    eng.currentWeapon = weapon;
+    eng.weaponTimer = durationSeconds * 60; // 60fps
+    setCurrentWeaponState(weapon);
+    setWeaponTimeRemaining(durationSeconds);
+    playSound('powerup');
+    const cfg = WEAPON_CONFIGS[weapon];
+    setShowCelebrationBanner(`🚀 ĐÃ KÍCH HOẠT: ${cfg.name} (${durationSeconds}s)`);
+    setTimeout(() => setShowCelebrationBanner(null), 2500);
   };
 
   // Đồng bộ Leaderboard khi có kỷ lục mới
@@ -354,25 +480,26 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
     });
   };
 
-  // Bắt đầu màn chơi
-  const startGame = (mode: 'endless' | 'survival' = gameMode) => {
+  // Bắt đầu màn chơi mới (Khởi đầu luôn với 3 mạng)
+  const startGame = () => {
     const canvas = canvasRef.current;
     const w = canvas ? canvas.width : 500;
     const h = canvas ? canvas.height : 560;
 
-    setGameMode(mode);
     engineRef.current = {
       playerX: w / 2,
       playerY: h - 60,
       playerWidth: 44,
       playerHeight: 44,
       playerSpeed: 7.5,
-      lives: mode === 'endless' ? 999 : 3,
+      lives: 3, // Khởi đầu chính xác 3 mạng
+      maxLives: 5,
       invincibleTime: 60,
       shieldActive: false,
       shieldTimer: 0,
-      tripleLaserTimer: 0,
       bombs: 1,
+      currentWeapon: 'twin_rapid',
+      weaponTimer: 0,
       lasers: [],
       enemies: [],
       orbs: [],
@@ -392,20 +519,26 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
     setCombo(0);
     setSurvivalSeconds(0);
     setReviveCount(0);
+    setCurrentLivesState(3);
+    setCurrentWeaponState('twin_rapid');
+    setWeaponTimeRemaining(0);
     setShowCelebrationBanner(null);
     setGameState('playing');
   };
 
-  // Hồi sinh tiếp tục chơi không mất điểm
+  // Hồi sinh tiếp tục chơi không mất điểm (+3 mạng)
   const handleRevive = () => {
     const eng = engineRef.current;
     eng.lives = 3;
     eng.invincibleTime = 120;
     eng.shieldActive = true;
-    eng.shieldTimer = 360; // 6s khiên
+    eng.shieldTimer = 360; // 6s khiên hộ thể
+    setCurrentLivesState(3);
     setReviveCount(prev => prev + 1);
     setGameState('playing');
     playSound('heal');
+    setShowCelebrationBanner('💖 HỒI SINH THÀNH CÔNG (+3 MẠNG)! CHIẾN TIẾP NÀO!');
+    setTimeout(() => setShowCelebrationBanner(null), 3000);
   };
 
   // Kích hoạt bom tri thức quét sạch bẫy
@@ -471,7 +604,7 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
     }
   };
 
-  // Keyboard controls
+  // Keyboard controls & Weapon Hotkeys (1..6)
   useEffect(() => {
     if (!isOpen) return;
 
@@ -490,6 +623,14 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
         e.preventDefault();
         triggerNukeBomb();
       }
+
+      // Phím nóng chọn 6 loại vũ khí (1..6)
+      if (e.key === '1') switchWeapon('twin_rapid', 9999);
+      if (e.key === '2') switchWeapon('triple_spread', 25);
+      if (e.key === '3') switchWeapon('storm_penta', 25);
+      if (e.key === '4') switchWeapon('pierce_lightning', 25);
+      if (e.key === '5') switchWeapon('homing_missile', 25);
+      if (e.key === '6') switchWeapon('plasma_blast', 25);
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -532,7 +673,7 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
       const w = canvas.width;
       const h = canvas.height;
 
-      // 1. Cập nhật Player & Keyboard
+      // 1. Cập nhật Player & Di chuyển
       if (keysRef.current.left) {
         eng.playerX = Math.max(eng.playerWidth / 2 + 10, eng.playerX - eng.playerSpeed);
       }
@@ -540,35 +681,94 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
         eng.playerX = Math.min(w - eng.playerWidth / 2 - 10, eng.playerX + eng.playerSpeed);
       }
 
-      // Shoot Laser
+      // 2. Cơ chế BẮN ĐẠN DÀY ĐẶC & 6 LOẠI ĐẠN ĐẶC SẮC
       if (eng.shootCooldown > 0) eng.shootCooldown--;
       if (keysRef.current.shoot && eng.shootCooldown === 0) {
-        if (eng.tripleLaserTimer > 0) {
-          // Bắn 3 tia quạt
-          eng.lasers.push({ x: eng.playerX, y: eng.playerY - 22, vx: 0, vy: -12 });
-          eng.lasers.push({ x: eng.playerX - 10, y: eng.playerY - 18, vx: -3.5, vy: -11.5 });
-          eng.lasers.push({ x: eng.playerX + 10, y: eng.playerY - 18, vx: 3.5, vy: -11.5 });
-        } else {
-          // Bắn tia đơn
-          eng.lasers.push({ x: eng.playerX, y: eng.playerY - 22, vx: 0, vy: -12 });
+        const wType = eng.currentWeapon;
+        const cfg = WEAPON_CONFIGS[wType];
+
+        if (wType === 'twin_rapid') {
+          // [1] Tia Đôi Siêu Thanh: Bắn 2 tia song song dày đặc liên thanh
+          eng.lasers.push({ x: eng.playerX - 9, y: eng.playerY - 20, vx: 0, vy: -14.5, type: 'twin_rapid' });
+          eng.lasers.push({ x: eng.playerX + 9, y: eng.playerY - 20, vx: 0, vy: -14.5, type: 'twin_rapid' });
+          playSound('laser');
+        } else if (wType === 'triple_spread') {
+          // [2] Phân Tán 3 Hướng: 3 tia xòe quạt góc 25 độ
+          eng.lasers.push({ x: eng.playerX, y: eng.playerY - 22, vx: 0, vy: -13.5, type: 'triple_spread' });
+          eng.lasers.push({ x: eng.playerX - 10, y: eng.playerY - 18, vx: -3.8, vy: -12.5, type: 'triple_spread' });
+          eng.lasers.push({ x: eng.playerX + 10, y: eng.playerY - 18, vx: 3.8, vy: -12.5, type: 'triple_spread' });
+          playSound('laser');
+        } else if (wType === 'storm_penta') {
+          // [3] Bão Đạn 5 Tia: 5 tia nón rộng phủ kín bề ngang
+          eng.lasers.push({ x: eng.playerX, y: eng.playerY - 24, vx: 0, vy: -14, type: 'storm_penta' });
+          eng.lasers.push({ x: eng.playerX - 8, y: eng.playerY - 20, vx: -3, vy: -13, type: 'storm_penta' });
+          eng.lasers.push({ x: eng.playerX + 8, y: eng.playerY - 20, vx: 3, vy: -13, type: 'storm_penta' });
+          eng.lasers.push({ x: eng.playerX - 16, y: eng.playerY - 16, vx: -6, vy: -11.5, type: 'storm_penta' });
+          eng.lasers.push({ x: eng.playerX + 16, y: eng.playerY - 16, vx: 6, vy: -11.5, type: 'storm_penta' });
+          playSound('laser');
+        } else if (wType === 'pierce_lightning') {
+          // [4] Lôi Điện Xuyên Phá: Tia sét cực đại xuyên qua mọi bẫy
+          eng.lasers.push({
+            x: eng.playerX,
+            y: eng.playerY - 24,
+            vx: 0,
+            vy: -15,
+            type: 'pierce_lightning',
+            pierceLeft: 4
+          });
+          playSound('laser');
+        } else if (wType === 'homing_missile') {
+          // [5] Tên Lửa Tầm Nhiệt: 2 quả tên lửa tự động bẻ cong đường đạn
+          eng.lasers.push({ x: eng.playerX - 14, y: eng.playerY - 10, vx: -2.5, vy: -8, type: 'homing_missile' });
+          eng.lasers.push({ x: eng.playerX + 14, y: eng.playerY - 10, vx: 2.5, vy: -8, type: 'homing_missile' });
+          playSound('laser');
+        } else if (wType === 'plasma_blast') {
+          // [6] Đại Pháo Plasma: Quả cầu nổ AOE siêu lớn
+          eng.lasers.push({
+            x: eng.playerX,
+            y: eng.playerY - 24,
+            vx: 0,
+            vy: -9.5,
+            type: 'plasma_blast',
+            radius: 11
+          });
+          playSound('laser');
         }
-        eng.shootCooldown = 11;
-        playSound('laser');
+
+        eng.shootCooldown = cfg.cooldown;
       }
 
-      // Timers
+      // Cập nhật bộ đếm thời gian hiệu lực vũ khí
+      if (eng.weaponTimer > 0) {
+        eng.weaponTimer--;
+        setWeaponTimeRemaining(Math.ceil(eng.weaponTimer / 60));
+        if (eng.weaponTimer === 0 && eng.currentWeapon !== 'twin_rapid') {
+          eng.currentWeapon = 'twin_rapid';
+          setCurrentWeaponState('twin_rapid');
+          setWeaponTimeRemaining(0);
+          setShowCelebrationBanner('⚡ Vũ khí trở về Tia Đôi Siêu Thanh');
+          setTimeout(() => setShowCelebrationBanner(null), 2000);
+        }
+      }
+
+      // Timers & Hiệu ứng
       if (eng.invincibleTime > 0) eng.invincibleTime--;
       if (eng.shieldTimer > 0) {
         eng.shieldTimer--;
         if (eng.shieldTimer === 0) eng.shieldActive = false;
       }
-      if (eng.tripleLaserTimer > 0) eng.tripleLaserTimer--;
 
       eng.timeAlive += 1 / 60;
       setSurvivalSeconds(Math.floor(eng.timeAlive));
 
-      // Tiến trình trạm vô tận (Station 1 -> Station 99+)
-      eng.stationProgress += 0.07;
+      // 3. TỐC ĐỘ THIẾT KẾ: LÚC ĐẦU CHẬM (1.0x), TỪ TỪ NHANH DẦN
+      // - 0s..30s: Chậm rãi, thư thái ngắm bắn (1.0x -> 1.2x)
+      // - 30s..90s: Nhịp độ tăng dần, vừa tay (1.2x -> 1.7x)
+      // - 90s+: Kịch tính leo rank cao trào (1.7x -> 2.4x max)
+      const speedFactor = 1 + Math.min(1.4, (eng.timeAlive / 55) * 0.45 + (eng.stationIndex - 1) * 0.18);
+
+      // Tiến trình trạm ngân hà (Station 1 -> Station 99+)
+      eng.stationProgress += 0.065;
       if (eng.stationProgress >= 100) {
         eng.stationProgress = 0;
         eng.stationIndex += 1;
@@ -577,18 +777,20 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
         setTimeout(() => setShowCelebrationBanner(null), 3000);
       }
 
-      // 2. Spawn Elements (Bẫy đề thi & Vật phẩm)
+      // 4. Sinh Cạm Bẫy Đề Thi: Ban đầu thưa & chậm, sau đó dồn dập hơn
       eng.spawnTimer++;
-      const trapRate = Math.max(26, 45 - Math.floor(eng.stationIndex * 1.5));
-      if (eng.spawnTimer % trapRate === 0) {
+      const trapInterval = Math.max(22, Math.floor(72 - (eng.timeAlive * 0.35) - (eng.stationIndex - 1) * 4));
+      if (eng.spawnTimer % trapInterval === 0) {
         const trapText = TRAP_LABELS[Math.floor(Math.random() * TRAP_LABELS.length)];
-        const isBigTrap = Math.random() < 0.28;
+        const isBigTrap = Math.random() < 0.26;
+        const baseSpeed = 1.3 + Math.random() * 0.7; // Tốc độ gốc chậm lúc đầu
+
         eng.enemies.push({
           id: Date.now() + Math.random(),
           x: 40 + Math.random() * (w - 80),
           y: -40,
           radius: isBigTrap ? 26 : 18,
-          vy: 2.3 + Math.random() * 1.8 + (eng.stationIndex * 0.1),
+          vy: baseSpeed * speedFactor, // Tăng tốc độ dần theo thời gian
           hp: isBigTrap ? 3 : 1,
           maxHp: isBigTrap ? 3 : 1,
           label: trapText,
@@ -596,13 +798,14 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
         });
       }
 
-      // Spawn Power-up / Knowledge Orbs
-      if (eng.spawnTimer % 55 === 0) {
+      // 5. Rơi Vật Phẩm & Hộp Tiếp Tế 6 Loại Vũ Khí
+      if (eng.spawnTimer % 60 === 0) {
         const roll = Math.random();
-        let orbType: 'normal' | 'rare' | 'vdc' | 'shield' | 'heart' | 'triple' | 'bomb' = 'normal';
+        let orbType: any = 'normal';
         let orbPts = 100;
         let orbCol = '#10b981';
         let orbLabel = ORB_LABELS[Math.floor(Math.random() * ORB_LABELS.length)];
+        let targetWp: WeaponType | undefined;
 
         if (roll < 0.08) {
           orbType = 'heart';
@@ -610,26 +813,51 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
           orbCol = '#ec4899';
           orbLabel = '💖 +1 Mạng';
         } else if (roll < 0.16) {
-          orbType = 'triple';
+          orbType = 'wp_triple';
           orbPts = 250;
-          orbCol = '#38bdf8';
-          orbLabel = '⚡ 3 Tia Laser';
+          orbCol = '#c084fc';
+          orbLabel = '🔮 3 Tia Quạt';
+          targetWp = 'triple_spread';
         } else if (roll < 0.24) {
+          orbType = 'wp_penta';
+          orbPts = 300;
+          orbCol = '#fbbf24';
+          orbLabel = '🌟 5 Tia Bão';
+          targetWp = 'storm_penta';
+        } else if (roll < 0.32) {
+          orbType = 'wp_lightning';
+          orbPts = 350;
+          orbCol = '#34d399';
+          orbLabel = '⚡ Lôi Điện Xuyên';
+          targetWp = 'pierce_lightning';
+        } else if (roll < 0.40) {
+          orbType = 'wp_homing';
+          orbPts = 350;
+          orbCol = '#f87171';
+          orbLabel = '🚀 Tên Lửa Tự Dò';
+          targetWp = 'homing_missile';
+        } else if (roll < 0.48) {
+          orbType = 'wp_plasma';
+          orbPts = 400;
+          orbCol = '#facc15';
+          orbLabel = '💥 Pháo Plasma AOE';
+          targetWp = 'plasma_blast';
+        } else if (roll < 0.56) {
           orbType = 'bomb';
           orbPts = 300;
-          orbCol = '#eab308';
+          orbCol = '#f59e0b';
           orbLabel = '💣 Bom Tri Thức';
-        } else if (roll < 0.36) {
+        } else if (roll < 0.66) {
           orbType = 'shield';
-          orbPts = 150;
+          orbPts = 200;
           orbCol = '#a855f7';
           orbLabel = '🛡️ Khiên Bất Tử';
-        } else if (roll < 0.55) {
+        } else if (roll < 0.82) {
           orbType = 'vdc';
           orbPts = 400;
-          orbCol = '#f59e0b';
+          orbCol = '#38bdf8';
           orbLabel = '💎 Vận Dụng Cao';
-        } else if (roll < 0.75) {
+        } else {
           orbType = 'rare';
           orbPts = 250;
           orbCol = '#3b82f6';
@@ -641,34 +869,128 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
           x: 35 + Math.random() * (w - 70),
           y: -30,
           radius: 17,
-          vy: 1.8 + Math.random() * 1.2,
+          vy: (1.2 + Math.random() * 0.9) * speedFactor,
           type: orbType,
           label: orbLabel,
           points: orbPts,
-          color: orbCol
+          color: orbCol,
+          weaponId: targetWp
         });
       }
 
-      // 3. Update Lasers
+      // 6. Cập nhật Lasers & Xử lý va chạm
       for (let i = eng.lasers.length - 1; i >= 0; i--) {
         const l = eng.lasers[i];
+
+        // Tự dò mục tiêu cho Tên Lửa Tầm Nhiệt
+        if (l.type === 'homing_missile') {
+          let target = null;
+          let minD = 99999;
+          for (const e of eng.enemies) {
+            if (e.y < l.y + 30) {
+              const d = Math.hypot(e.x - l.x, e.y - l.y);
+              if (d < minD) {
+                minD = d;
+                target = e;
+              }
+            }
+          }
+          if (target) {
+            const angle = Math.atan2(target.y - l.y, target.x - l.x);
+            const targetVx = Math.cos(angle) * 11.5;
+            const targetVy = Math.sin(angle) * 11.5;
+            l.vx = l.vx * 0.72 + targetVx * 0.28;
+            l.vy = l.vy * 0.72 + targetVy * 0.28;
+          }
+          // Hạt khói lửa sau đuôi tên lửa
+          if (Math.random() < 0.6) {
+            eng.particles.push({
+              x: l.x,
+              y: l.y + 6,
+              vx: (Math.random() - 0.5) * 1.5,
+              vy: 2 + Math.random() * 2,
+              life: 10,
+              maxLife: 10,
+              color: '#f97316',
+              size: 2
+            });
+          }
+        }
+
         l.x += l.vx;
         l.y += l.vy;
 
-        if (l.y < -30 || l.x < -20 || l.x > w + 20) {
+        if (l.y < -40 || l.x < -30 || l.x > w + 30) {
           eng.lasers.splice(i, 1);
           continue;
         }
 
-        // Va chạm bẫy
+        // Kiểm tra va chạm với Cạm bẫy
+        let laserRemoved = false;
         for (let j = eng.enemies.length - 1; j >= 0; j--) {
           const e = eng.enemies[j];
+          const hitRadius = (l.radius || 4) + e.radius;
           const dist = Math.hypot(l.x - e.x, l.y - e.y);
-          if (dist < e.radius + 6) {
+
+          if (dist < hitRadius) {
+            // [A] Đại Pháo Plasma Nổ Lan (AOE)
+            if (l.type === 'plasma_blast') {
+              playSound('plasma_blast');
+              // Sóng xung kích nổ lan 75px
+              for (let p = 0; p < 24; p++) {
+                eng.particles.push({
+                  x: l.x,
+                  y: l.y,
+                  vx: (Math.random() - 0.5) * 11,
+                  vy: (Math.random() - 0.5) * 11,
+                  life: 25,
+                  maxLife: 25,
+                  color: '#facc15',
+                  size: 4
+                });
+              }
+              // Quét sát thương toàn bộ bẫy lân cận
+              eng.enemies.forEach(other => {
+                const aoeDist = Math.hypot(other.x - l.x, other.y - l.y);
+                if (aoeDist <= 75) {
+                  other.hp -= 3;
+                }
+              });
+              eng.lasers.splice(i, 1);
+              laserRemoved = true;
+              break;
+            }
+
+            // [B] Lôi Điện Xuyên Phá (Pierce Beam)
+            if (l.type === 'pierce_lightning') {
+              e.hp -= 2;
+              playSound('hit');
+              l.pierceLeft = (l.pierceLeft || 1) - 1;
+              for (let p = 0; p < 6; p++) {
+                eng.particles.push({
+                  x: l.x,
+                  y: l.y,
+                  vx: (Math.random() - 0.5) * 8,
+                  vy: (Math.random() - 0.5) * 8,
+                  life: 12,
+                  maxLife: 12,
+                  color: '#34d399',
+                  size: 2.5
+                });
+              }
+              if (l.pierceLeft <= 0) {
+                eng.lasers.splice(i, 1);
+                laserRemoved = true;
+                break;
+              }
+              continue; // Tia sét xuyên tiếp không dừng lại!
+            }
+
+            // [C] Các loại đạn thông thường / 3 tia / 5 tia / tên lửa
             e.hp--;
             eng.lasers.splice(i, 1);
+            laserRemoved = true;
 
-            // Tia lửa
             for (let p = 0; p < 8; p++) {
               eng.particles.push({
                 x: l.x,
@@ -677,41 +999,50 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
                 vy: (Math.random() - 0.5) * 6,
                 life: 14,
                 maxLife: 14,
-                color: '#38bdf8',
+                color: WEAPON_CONFIGS[l.type].color,
                 size: 2.5
               });
             }
 
-            if (e.hp <= 0) {
-              localDestroyed++;
-              setTrapsDestroyed(localDestroyed);
-              localScore += 150 * (1 + localCombo * 0.2);
-              setScore(Math.floor(localScore));
-
-              // Nổ mạnh
-              for (let p = 0; p < 16; p++) {
-                eng.particles.push({
-                  x: e.x,
-                  y: e.y,
-                  vx: (Math.random() - 0.5) * 9,
-                  vy: (Math.random() - 0.5) * 9,
-                  life: 22,
-                  maxLife: 22,
-                  color: e.color,
-                  size: 3.5
-                });
-              }
+            if (l.type === 'homing_missile') {
               playSound('explode');
-              eng.enemies.splice(j, 1);
             } else {
               playSound('hit');
             }
             break;
           }
         }
+
+        // Quét bẫy bị nổ sau đòn tấn công
+        for (let j = eng.enemies.length - 1; j >= 0; j--) {
+          const e = eng.enemies[j];
+          if (e.hp <= 0) {
+            localDestroyed++;
+            setTrapsDestroyed(localDestroyed);
+            localScore += 150 * (1 + localCombo * 0.2);
+            setScore(Math.floor(localScore));
+
+            for (let p = 0; p < 16; p++) {
+              eng.particles.push({
+                x: e.x,
+                y: e.y,
+                vx: (Math.random() - 0.5) * 9,
+                vy: (Math.random() - 0.5) * 9,
+                life: 22,
+                maxLife: 22,
+                color: e.color,
+                size: 3.5
+              });
+            }
+            playSound('explode');
+            eng.enemies.splice(j, 1);
+          }
+        }
+
+        if (laserRemoved) continue;
       }
 
-      // 4. Update Enemies (Cạm bẫy)
+      // 7. Cập nhật Enemies (Cạm bẫy rơi xuống)
       for (let i = eng.enemies.length - 1; i >= 0; i--) {
         const e = eng.enemies[i];
         e.y += e.vy;
@@ -719,65 +1050,48 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
         const distToPlayer = Math.hypot(eng.playerX - e.x, eng.playerY - e.y);
         if (distToPlayer < e.radius + eng.playerWidth / 2 - 4) {
           if (eng.shieldActive) {
-            // Khiên bảo vệ làm vỡ bẫy
+            // Khiên bảo vệ làm vỡ cạm bẫy
             localDestroyed++;
             setTrapsDestroyed(localDestroyed);
             playSound('explode');
             eng.enemies.splice(i, 1);
             continue;
           } else if (eng.invincibleTime === 0) {
-            if (gameMode === 'endless') {
-              // Chế độ Vô Tận Bất Tử: Đẩy lùi bẫy, trừ combo nhưng KHÔNG CHẾT!
-              eng.invincibleTime = 50;
-              localCombo = 0;
-              setCombo(0);
-              playSound('hit');
-              eng.enemies.splice(i, 1);
+            // TRỪ 1 MẠNG KHI VA CHẠM (Khởi đầu 3 mạng)
+            eng.lives--;
+            setCurrentLivesState(eng.lives);
+            eng.invincibleTime = 80;
+            localCombo = 0;
+            setCombo(0);
+            playSound('hit');
 
-              for (let p = 0; p < 16; p++) {
-                eng.particles.push({
-                  x: eng.playerX,
-                  y: eng.playerY,
-                  vx: (Math.random() - 0.5) * 7,
-                  vy: (Math.random() - 0.5) * 7,
-                  life: 20,
-                  maxLife: 20,
-                  color: '#60a5fa',
-                  size: 3
-                });
-              }
-            } else {
-              // Chế độ Sinh Tồn: Trừ 1 mạng
-              eng.lives--;
-              eng.invincibleTime = 80;
-              localCombo = 0;
-              setCombo(0);
-              playSound('hit');
-
-              for (let p = 0; p < 20; p++) {
-                eng.particles.push({
-                  x: eng.playerX,
-                  y: eng.playerY,
-                  vx: (Math.random() - 0.5) * 8,
-                  vy: (Math.random() - 0.5) * 8,
-                  life: 25,
-                  maxLife: 25,
-                  color: '#ef4444',
-                  size: 3
-                });
-              }
-
-              if (eng.lives <= 0) {
-                setGameState('gameover');
-                const finalSc = Math.floor(localScore);
-                if (finalSc > highScore) {
-                  setHighScore(finalSc);
-                  localStorage.setItem('eduadvisor_arcade_highscore', finalSc.toString());
-                }
-                syncLeaderboard(finalSc, localDestroyed, eng.timeAlive);
-                return;
-              }
+            for (let p = 0; p < 20; p++) {
+              eng.particles.push({
+                x: eng.playerX,
+                y: eng.playerY,
+                vx: (Math.random() - 0.5) * 8,
+                vy: (Math.random() - 0.5) * 8,
+                life: 25,
+                maxLife: 25,
+                color: '#ef4444',
+                size: 3
+              });
             }
+
+            eng.enemies.splice(i, 1);
+
+            // Hết 3 mạng -> Kích hoạt Game Over
+            if (eng.lives <= 0) {
+              setGameState('gameover');
+              const finalSc = Math.floor(localScore);
+              if (finalSc > highScore) {
+                setHighScore(finalSc);
+                localStorage.setItem('eduadvisor_arcade_highscore', finalSc.toString());
+              }
+              syncLeaderboard(finalSc, localDestroyed, eng.timeAlive);
+              return;
+            }
+            continue;
           }
         }
 
@@ -786,7 +1100,7 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
         }
       }
 
-      // 5. Update Orbs
+      // 8. Cập nhật Orbs (Nhặt ngọc & Nâng cấp vũ khí)
       for (let i = eng.orbs.length - 1; i >= 0; i--) {
         const o = eng.orbs[i];
         o.y += o.vy;
@@ -803,11 +1117,16 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
             eng.shieldTimer = 360; // 6s khiên
             playSound('shield');
           } else if (o.type === 'heart') {
-            if (eng.lives < 5) eng.lives++;
+            if (eng.lives < eng.maxLives) {
+              eng.lives++;
+              setCurrentLivesState(eng.lives);
+            }
             playSound('heal');
-          } else if (o.type === 'triple') {
-            eng.tripleLaserTimer = 550; // ~9s 3 tia
-            playSound('powerup');
+            setShowCelebrationBanner('💖 BẠN ĐÃ NHẬT TRÁI TIM (+1 MẠNG)!');
+            setTimeout(() => setShowCelebrationBanner(null), 2000);
+          } else if (o.weaponId) {
+            // Nâng cấp trực tiếp 1 trong các vũ khí
+            switchWeapon(o.weaponId, 22);
           } else if (o.type === 'bomb') {
             eng.bombs = Math.min(3, eng.bombs + 1);
             playSound('powerup');
@@ -840,7 +1159,7 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
         }
       }
 
-      // 6. Update Particles
+      // 9. Cập nhật Hạt nổ (Particles)
       for (let i = eng.particles.length - 1; i >= 0; i--) {
         const p = eng.particles[i];
         p.x += p.vx;
@@ -851,19 +1170,17 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
         }
       }
 
-      // 7. Update Starfield
+      // 10. Starfield động tăng tốc theo speedFactor
       eng.stars.forEach(s => {
-        s.y += s.speed;
+        s.y += s.baseSpeed * (0.8 + speedFactor * 0.35);
         if (s.y > h) {
           s.y = 0;
           s.x = Math.random() * w;
         }
       });
 
-      // Kiểm tra huy hiệu
+      // Kiểm tra huy hiệu & Kỷ lục
       checkBadgeUnlocks(localScore, localDestroyed, localCombo, eng.timeAlive);
-
-      // Cập nhật kỷ lục liên tục
       if (Math.floor(localScore) > highScore) {
         setHighScore(Math.floor(localScore));
         localStorage.setItem('eduadvisor_arcade_highscore', Math.floor(localScore).toString());
@@ -899,15 +1216,56 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
         ctx.stroke();
       }
 
-      // Lasers
+      // VẼ 6 LOẠI ĐẠN ĐẶC SẮC (Lasers)
       eng.lasers.forEach(l => {
-        ctx.shadowColor = eng.tripleLaserTimer > 0 ? '#38bdf8' : '#60a5fa';
-        ctx.shadowBlur = 12;
-        ctx.fillStyle = eng.tripleLaserTimer > 0 ? '#06b6d4' : '#38bdf8';
-        ctx.fillRect(l.x - 2.5, l.y - 12, 5, 18);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(l.x - 1, l.y - 10, 2, 12);
-        ctx.shadowBlur = 0;
+        const cfg = WEAPON_CONFIGS[l.type];
+        ctx.save();
+
+        if (l.type === 'plasma_blast') {
+          // Quả cầu plasma khổng lồ nổ lan
+          ctx.shadowColor = '#facc15';
+          ctx.shadowBlur = 18;
+          ctx.fillStyle = '#facc15';
+          ctx.beginPath();
+          ctx.arc(l.x, l.y, l.radius || 11, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(l.x, l.y, (l.radius || 11) * 0.5, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (l.type === 'pierce_lightning') {
+          // Tia sét xuyên phá xanh lục bảo
+          ctx.shadowColor = '#34d399';
+          ctx.shadowBlur = 16;
+          ctx.fillStyle = '#34d399';
+          ctx.fillRect(l.x - 3.5, l.y - 16, 7, 24);
+
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(l.x - 1.5, l.y - 14, 3, 20);
+        } else if (l.type === 'homing_missile') {
+          // Tên lửa tầm nhiệt đỏ cam
+          ctx.shadowColor = '#f87171';
+          ctx.shadowBlur = 12;
+          ctx.fillStyle = '#ef4444';
+          ctx.beginPath();
+          ctx.arc(l.x, l.y, 4.5, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#fbbf24';
+          ctx.fillRect(l.x - 2, l.y - 2, 4, 8);
+        } else {
+          // Tia đôi, 3 tia quạt, 5 tia bão
+          ctx.shadowColor = cfg.color;
+          ctx.shadowBlur = 14;
+          ctx.fillStyle = cfg.color;
+          ctx.fillRect(l.x - 2.5, l.y - 13, 5, 20);
+
+          ctx.fillStyle = cfg.coreColor;
+          ctx.fillRect(l.x - 1, l.y - 11, 2, 14);
+        }
+
+        ctx.restore();
       });
 
       // Enemies (Cạm bẫy đề thi)
@@ -954,7 +1312,7 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
         ctx.restore();
       });
 
-      // Orbs (Ngọc & Vật phẩm)
+      // Orbs (Ngọc & Hộp Tiếp Tế Vũ Khí)
       eng.orbs.forEach(o => {
         ctx.save();
         ctx.translate(o.x, o.y);
@@ -998,10 +1356,12 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
         ctx.save();
         ctx.translate(eng.playerX, eng.playerY);
 
+        const currentWpCfg = WEAPON_CONFIGS[eng.currentWeapon];
+
         // Lửa phản lực
-        ctx.fillStyle = '#f97316';
-        ctx.shadowColor = '#fb923c';
-        ctx.shadowBlur = 12;
+        ctx.fillStyle = currentWpCfg.color;
+        ctx.shadowColor = currentWpCfg.color;
+        ctx.shadowBlur = 14;
         ctx.beginPath();
         ctx.moveTo(-8, 16);
         ctx.lineTo(8, 16);
@@ -1009,10 +1369,10 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
         ctx.closePath();
         ctx.fill();
 
-        // Thân phi thuyền
-        ctx.shadowColor = eng.tripleLaserTimer > 0 ? '#38bdf8' : '#3b82f6';
-        ctx.shadowBlur = 15;
-        ctx.fillStyle = eng.tripleLaserTimer > 0 ? '#0284c7' : '#2563eb';
+        // Thân phi thuyền chuyển màu theo vũ khí hiện tại
+        ctx.shadowColor = currentWpCfg.color;
+        ctx.shadowBlur = 16;
+        ctx.fillStyle = '#1e293b';
         ctx.beginPath();
         ctx.moveTo(0, -22);
         ctx.lineTo(18, 16);
@@ -1022,8 +1382,13 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
         ctx.closePath();
         ctx.fill();
 
+        // Viền năng lượng vũ khí
+        ctx.strokeStyle = currentWpCfg.color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
         // Cánh & Buồng lái
-        ctx.fillStyle = '#60a5fa';
+        ctx.fillStyle = currentWpCfg.color;
         ctx.beginPath();
         ctx.moveTo(0, -18);
         ctx.lineTo(6, 4);
@@ -1058,7 +1423,7 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [isOpen, gameState, gameMode, isMuted, highScore, unlockedBadges]);
+  }, [isOpen, gameState, isMuted, highScore, unlockedBadges]);
 
   if (!isOpen) return null;
 
@@ -1067,7 +1432,7 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
       <div className="w-full max-w-5xl bg-slate-950 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         
         {/* Header Bar */}
-        <div className="px-5 py-4 border-b border-slate-800 bg-slate-900/60 flex items-center justify-between">
+        <div className="px-5 py-3.5 border-b border-slate-800 bg-slate-900/60 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
               <Compass className="w-5 h-5" />
@@ -1108,230 +1473,247 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 flex-1 overflow-hidden min-h-[560px]">
           
           {/* Left Canvas Arena */}
-          <div className="lg:col-span-8 bg-black flex items-center justify-center relative select-none overflow-hidden p-2">
-            <canvas
-              ref={canvasRef}
-              width={500}
-              height={560}
-              onMouseMove={(e) => {
-                if (gameState !== 'playing' || !canvasRef.current) return;
-                const rect = canvasRef.current.getBoundingClientRect();
-                const mouseX = e.clientX - rect.left;
-                engineRef.current.playerX = Math.max(25, Math.min(canvasRef.current.width - 25, mouseX));
-              }}
-              onMouseDown={() => {
-                if (gameState === 'playing') keysRef.current.shoot = true;
-              }}
-              onMouseUp={() => {
-                keysRef.current.shoot = false;
-              }}
-              className="border border-slate-800/80 rounded-2xl shadow-inner bg-slate-950 cursor-crosshair max-w-full max-h-[560px]"
-            />
+          <div className="lg:col-span-8 bg-black flex flex-col items-center justify-center relative select-none overflow-hidden p-2">
+            <div className="relative">
+              <canvas
+                ref={canvasRef}
+                width={500}
+                height={520}
+                onMouseMove={(e) => {
+                  if (gameState !== 'playing' || !canvasRef.current) return;
+                  const rect = canvasRef.current.getBoundingClientRect();
+                  const mouseX = e.clientX - rect.left;
+                  engineRef.current.playerX = Math.max(25, Math.min(canvasRef.current.width - 25, mouseX));
+                }}
+                onMouseDown={() => {
+                  if (gameState === 'playing') keysRef.current.shoot = true;
+                }}
+                onMouseUp={() => {
+                  keysRef.current.shoot = false;
+                }}
+                className="border border-slate-800/80 rounded-2xl shadow-inner bg-slate-950 cursor-crosshair max-w-full max-h-[520px]"
+              />
 
-            {/* Notification Celebration Banner */}
-            {showCelebrationBanner && (
-              <div className="absolute top-16 inset-x-8 bg-gradient-to-r from-amber-500/90 via-orange-500/90 to-purple-600/90 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xl border border-amber-300/40 text-center animate-bounce z-20">
-                {showCelebrationBanner}
-              </div>
-            )}
+              {/* Notification Celebration Banner */}
+              {showCelebrationBanner && (
+                <div className="absolute top-14 inset-x-6 bg-gradient-to-r from-amber-500/95 via-orange-500/95 to-purple-600/95 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xl border border-amber-300/40 text-center animate-bounce z-20">
+                  {showCelebrationBanner}
+                </div>
+              )}
 
-            {/* Live In-Game HUD Overlay */}
-            {gameState === 'playing' && (
-              <div className="absolute top-4 inset-x-4 pointer-events-none flex items-center justify-between text-xs z-10">
-                {/* Lives & Score */}
-                <div className="flex items-center gap-3 bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-700/60 shadow-lg">
-                  {gameMode === 'endless' ? (
-                    <div className="flex items-center gap-1.5 text-cyan-400 font-extrabold text-[11px]">
-                      <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
-                      <span>VÔ TẬN BẤT TỬ ∞</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1 text-rose-400 font-bold">
+              {/* Live In-Game HUD Overlay: 3 Mạng, Điểm số, Vũ khí, Bom, Trạm */}
+              {gameState === 'playing' && (
+                <div className="absolute top-3 inset-x-3 pointer-events-none flex items-center justify-between text-xs z-10">
+                  {/* Mạng (3 Mạng ban đầu, tối đa 5) & Điểm */}
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-rose-500/50 shadow-lg">
+                      <span className="text-[10px] font-extrabold text-rose-300 mr-0.5">MẠNG:</span>
                       {Array.from({ length: 5 }).map((_, i) => (
-                        <span key={i} className={`text-sm ${i < engineRef.current.lives ? 'opacity-100 scale-105' : 'opacity-20'}`}>
+                        <span
+                          key={i}
+                          className={`text-sm transition-all duration-300 ${
+                            i < currentLivesState
+                              ? 'opacity-100 scale-110 drop-shadow-[0_0_6px_rgba(244,63,94,0.9)]'
+                              : 'opacity-20 scale-90'
+                          }`}
+                        >
                           ❤️
                         </span>
                       ))}
                     </div>
-                  )}
 
-                  <div className="h-4 w-px bg-slate-700" />
-                  <div className="font-mono text-emerald-400 font-bold text-sm">
-                    {score.toLocaleString()} <span className="text-[10px] text-slate-400 font-sans">điểm</span>
+                    <div className="font-mono text-emerald-400 font-bold text-sm bg-slate-900/90 px-3 py-1.5 rounded-xl border border-slate-700/60 shadow-lg">
+                      {score.toLocaleString()} <span className="text-[10px] text-slate-400 font-sans">điểm</span>
+                    </div>
+                  </div>
+
+                  {/* Vũ khí hiện tại & Bom & Trạm */}
+                  <div className="flex items-center gap-2">
+                    {/* Badge Vũ khí đang trang bị */}
+                    <div
+                      className="px-2.5 py-1 rounded-xl text-[10px] font-bold flex items-center gap-1 shadow-lg border backdrop-blur-md"
+                      style={{
+                        backgroundColor: `${WEAPON_CONFIGS[currentWeaponState].color}20`,
+                        borderColor: WEAPON_CONFIGS[currentWeaponState].color,
+                        color: WEAPON_CONFIGS[currentWeaponState].color
+                      }}
+                    >
+                      <span>{WEAPON_CONFIGS[currentWeaponState].iconText}</span>
+                      <span>{WEAPON_CONFIGS[currentWeaponState].shortName}</span>
+                      {weaponTimeRemaining > 0 && currentWeaponState !== 'twin_rapid' && (
+                        <span className="ml-1 text-[9px] bg-black/40 px-1 rounded font-mono">
+                          {weaponTimeRemaining}s
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="bg-slate-900/90 backdrop-blur-md px-2.5 py-1 rounded-xl border border-slate-700/60 shadow-lg text-[11px] font-mono font-bold text-amber-300 flex items-center gap-1">
+                      <span>⏱ {formatTime(survivalSeconds)}</span>
+                    </div>
+
+                    <button
+                      onClick={triggerNukeBomb}
+                      className="pointer-events-auto bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 px-2 py-1 rounded-xl text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-transform active:scale-95"
+                      title="Bấm B hoặc click để kích hoạt bom quét bẫy"
+                    >
+                      <Bomb className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Bom ({engineRef.current.bombs})</span>
+                    </button>
+
+                    <div className="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-md px-2.5 py-1 rounded-xl border border-slate-700/60 shadow-lg text-[10px] font-bold text-blue-400">
+                      <span>Trạm {engineRef.current.stationIndex}/∞</span>
+                      {combo > 1 && (
+                        <span className="text-amber-400 font-mono">x{combo}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
+              )}
 
-                {/* Survival Time & Station & Bombs */}
-                <div className="flex items-center gap-2">
-                  <div className="bg-slate-900/85 backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-slate-700/60 shadow-lg text-[11px] font-mono font-bold text-amber-300 flex items-center gap-1">
-                    <span>⏱ {formatTime(survivalSeconds)}</span>
+              {/* Start Intro Overlay */}
+              {gameState === 'intro' && (
+                <div className="absolute inset-0 bg-slate-950/92 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-3.5 z-20">
+                  <div className="w-14 h-14 rounded-3xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-xl shadow-indigo-500/30 animate-bounce">
+                    <Zap className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-bold text-white font-serif">Chinh Phục Ngân Hà Lộ Trình</h4>
+                    <p className="text-xs text-slate-300 max-w-sm mt-1 leading-relaxed">
+                      Mỗi trận có <strong>3 Mạng</strong>. Đạn bắn liên thanh cực dày, tốc độ ban đầu <strong>chậm rãi</strong> rồi <strong>nhanh dần</strong>, mở khóa <strong>6 loại đạn tối tân</strong>!
+                    </p>
                   </div>
 
-                  {engineRef.current.tripleLaserTimer > 0 && (
-                    <span className="text-[10px] font-extrabold text-cyan-300 bg-cyan-950/90 px-2 py-1 rounded-lg border border-cyan-700 animate-pulse">
-                      ⚡ 3 TIA
-                    </span>
-                  )}
+                  {/* 6 Loại đạn preview */}
+                  <div className="w-full max-w-md bg-slate-900/90 p-3 rounded-2xl border border-slate-800 text-left space-y-1.5">
+                    <div className="text-[11px] font-bold text-blue-400 uppercase tracking-wider flex items-center justify-between">
+                      <span className="flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" /> Kho Vũ Khí 6 Loại Đạn (Phím 1..6):</span>
+                      <span className="text-[10px] text-slate-400 font-normal">Bấm số hoặc nhặt hòm tiếp tế</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+                      {Object.values(WEAPON_CONFIGS).map(w => (
+                        <div key={w.id} className="p-1.5 rounded-lg bg-slate-800/60 border border-slate-700/50 flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded bg-slate-900 text-center font-mono font-bold text-amber-400 text-[10px] flex items-center justify-center">
+                            {w.keyNum}
+                          </span>
+                          <span className="truncate font-semibold" style={{ color: w.color }}>{w.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Hướng dẫn phím */}
+                  <div className="bg-slate-900/80 p-3 rounded-2xl border border-slate-800 text-left text-xs space-y-1 w-full max-w-md">
+                    <div className="flex items-center justify-between text-slate-300 text-[11px]">
+                      <span>Di chuyển & Ngắm bắn:</span>
+                      <strong className="text-white font-mono bg-slate-800 px-2 py-0.5 rounded">Chuột / Phím A, D, ←, →</strong>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-300 text-[11px]">
+                      <span>Bắn Liên Thanh:</span>
+                      <strong className="text-white font-mono bg-slate-800 px-2 py-0.5 rounded">Giữ Space / Chuột Trái</strong>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-300 text-[11px]">
+                      <span>Bom Tri Thức:</span>
+                      <strong className="text-amber-300 font-mono bg-slate-800 px-2 py-0.5 rounded">Phím B / Nút Bom</strong>
+                    </div>
+                  </div>
 
                   <button
-                    onClick={triggerNukeBomb}
-                    className="pointer-events-auto bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 px-2 py-1 rounded-xl text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-transform active:scale-95"
-                    title="Bấm B hoặc click để quét sạch bẫy"
+                    onClick={startGame}
+                    className="w-full max-w-md py-3 px-6 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all"
                   >
-                    <Bomb className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Bom ({engineRef.current.bombs})</span>
+                    <Play className="w-4 h-4 fill-white" />
+                    <span>BẮT ĐẦU CHINH PHỤC (3 MẠNG - LEO RANK)</span>
                   </button>
+                </div>
+              )}
 
-                  <div className="flex items-center gap-2 bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-700/60 shadow-lg">
-                    <span className="text-[10px] font-bold text-blue-400">
-                      Trạm {engineRef.current.stationIndex}/∞
-                    </span>
-                    {combo > 1 && (
-                      <span className="text-[10px] font-extrabold text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded-md border border-amber-800 animate-pulse">
-                        COMBO x{combo}
+              {/* Game Over Overlay: Hết 3 mạng có nút Hồi Sinh tiếp tục hoặc Lưu Rank */}
+              {gameState === 'gameover' && (
+                <div className="absolute inset-0 bg-slate-950/92 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4 z-20">
+                  <div className="w-14 h-14 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center">
+                    <Heart className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-bold text-white font-serif">Hết 3 Mạng Sinh Tồn!</h4>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Bạn có thể hồi sinh ngay để giữ nguyên điểm số chơi tiếp, hoặc lưu kỷ lục vào Bảng Xếp Hạng!
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-2 w-full max-w-sm text-center">
+                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                      <div className="text-[10px] text-slate-400">Điểm Số</div>
+                      <div className="text-sm font-bold text-emerald-400 font-mono">{score.toLocaleString()}</div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                      <div className="text-[10px] text-slate-400">Thời Gian</div>
+                      <div className="text-sm font-bold text-cyan-400 font-mono">{formatTime(survivalSeconds)}</div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                      <div className="text-[10px] text-slate-400">Bẫy Bắn Vỡ</div>
+                      <div className="text-sm font-bold text-amber-400 font-mono">{trapsDestroyed}</div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                      <div className="text-[10px] text-slate-400">Trạm Đạt</div>
+                      <div className="text-sm font-bold text-purple-400 font-mono">{engineRef.current.stationIndex}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2 w-full max-w-sm">
+                    <button
+                      onClick={handleRevive}
+                      className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/20 active:scale-95"
+                    >
+                      <Heart className="w-4 h-4 fill-white" />
+                      <span>💖 HỒI SINH (+3 MẠNG) CHƠI TIẾP NGAY</span>
+                    </button>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={startGame}
+                        className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Chơi Lại Trận Mới</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('leaderboard')}
+                        className="flex-1 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Trophy className="w-3.5 h-3.5" />
+                        <span>Xem Bảng Xếp Hạng</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Thanh Phím Tắt Đổi 6 Loại Đạn Nhanh Trong Trận */}
+            {gameState === 'playing' && (
+              <div className="w-full max-w-[500px] mt-2 flex items-center justify-between gap-1 px-1">
+                {Object.values(WEAPON_CONFIGS).map(w => {
+                  const isActive = currentWeaponState === w.id;
+                  return (
+                    <button
+                      key={w.id}
+                      onClick={() => switchWeapon(w.id, 25)}
+                      className={`flex-1 py-1 px-1 rounded-lg border text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-slate-800 border-white text-white shadow-md scale-105'
+                          : 'bg-slate-900/80 border-slate-800/80 text-slate-400 hover:text-white'
+                      }`}
+                      title={w.desc}
+                    >
+                      <span className="font-mono text-amber-400 font-extrabold text-[9px] bg-slate-950 px-1 rounded">
+                        {w.keyNum}
                       </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Start Intro Overlay */}
-            {gameState === 'intro' && (
-              <div className="absolute inset-0 bg-slate-950/92 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4 z-20">
-                <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-xl shadow-indigo-500/30 animate-bounce">
-                  <Zap className="w-8 h-8" />
-                </div>
-                <div>
-                  <h4 className="text-xl font-bold text-white">Chinh Phục Ngân Hà Lộ Trình</h4>
-                  <p className="text-xs text-slate-300 max-w-sm mt-1.5 leading-relaxed">
-                    Điều khiển <strong>Phi Thuyền Tri Thức</strong>: Bắn nổ cạm bẫy đề thi, thu thập vật phẩm và thăng cấp không giới hạn thời gian!
-                  </p>
-                </div>
-
-                {/* Mode Selection */}
-                <div className="grid grid-cols-2 gap-3 w-full max-w-sm">
-                  <button
-                    type="button"
-                    onClick={() => setGameMode('endless')}
-                    className={`p-3 rounded-2xl border text-left transition-all ${
-                      gameMode === 'endless'
-                        ? 'bg-blue-900/40 border-blue-500 ring-2 ring-blue-500/30 text-white'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <div className="font-bold text-xs flex items-center gap-1.5 text-blue-400">
-                      <Sparkles className="w-3.5 h-3.5" /> Chế Độ Vô Tận
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      Chơi bao lâu cũng được, mạng bất tử ∞, luyện tập không áp lực!
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setGameMode('survival')}
-                    className={`p-3 rounded-2xl border text-left transition-all ${
-                      gameMode === 'survival'
-                        ? 'bg-amber-900/40 border-amber-500 ring-2 ring-amber-500/30 text-white'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <div className="font-bold text-xs flex items-center gap-1.5 text-amber-400">
-                      <Trophy className="w-3.5 h-3.5" /> Leo Rank Sinh Tồn
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      Bắt đầu 3 mạng, nhặt tim hồi máu & bom, tranh cúp Bảng Xếp Hạng!
-                    </p>
-                  </button>
-                </div>
-
-                <div className="bg-slate-900/80 p-3.5 rounded-2xl border border-slate-800 text-left text-xs space-y-1.5 w-full max-w-sm">
-                  <div className="text-[11px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" /> Thao tác điều khiển:
-                  </div>
-                  <div className="flex items-center justify-between text-slate-300 text-[11px]">
-                    <span>Di chuyển:</span>
-                    <strong className="text-white font-mono bg-slate-800 px-2 py-0.5 rounded">Chuột / Phím A, D, ←, →</strong>
-                  </div>
-                  <div className="flex items-center justify-between text-slate-300 text-[11px]">
-                    <span>Bắn Laser:</span>
-                    <strong className="text-white font-mono bg-slate-800 px-2 py-0.5 rounded">Space / Click Chuột</strong>
-                  </div>
-                  <div className="flex items-center justify-between text-slate-300 text-[11px]">
-                    <span>Bom Quét Bẫy:</span>
-                    <strong className="text-amber-300 font-mono bg-slate-800 px-2 py-0.5 rounded">Phím B / Nút Bom</strong>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => startGame(gameMode)}
-                  className="w-full max-w-sm py-3 px-6 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all"
-                >
-                  <Play className="w-4 h-4 fill-white" />
-                  <span>BẮT ĐẦU CHINH PHỤC ({gameMode === 'endless' ? 'CHƠI VÔ TẬN' : 'LEO RANK'})</span>
-                </button>
-              </div>
-            )}
-
-            {/* Game Over Overlay (Survival mode) */}
-            {gameState === 'gameover' && (
-              <div className="absolute inset-0 bg-slate-950/92 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4 z-20">
-                <div className="w-14 h-14 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center">
-                  <Heart className="w-7 h-7" />
-                </div>
-                <div>
-                  <h4 className="text-xl font-bold text-white font-serif">Hết Mạng Sinh Tồn!</h4>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Bạn có thể hồi sinh để tiếp tục trận đấu bất tận hoặc lưu kỷ lục vào Bảng Xếp Hạng!
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-4 gap-2 w-full max-w-sm text-center">
-                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                    <div className="text-[10px] text-slate-400">Điểm Số</div>
-                    <div className="text-sm font-bold text-emerald-400 font-mono">{score.toLocaleString()}</div>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                    <div className="text-[10px] text-slate-400">Thời Gian</div>
-                    <div className="text-sm font-bold text-cyan-400 font-mono">{formatTime(survivalSeconds)}</div>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                    <div className="text-[10px] text-slate-400">Bẫy Bắn Vỡ</div>
-                    <div className="text-sm font-bold text-amber-400 font-mono">{trapsDestroyed}</div>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                    <div className="text-[10px] text-slate-400">Trạm Đạt</div>
-                    <div className="text-sm font-bold text-purple-400 font-mono">{engineRef.current.stationIndex}</div>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-2 w-full max-w-sm">
-                  <button
-                    onClick={handleRevive}
-                    className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/20 active:scale-95"
-                  >
-                    <Heart className="w-4 h-4 fill-white" />
-                    <span>💖 HỒI SINH (+3 MẠNG) CHƠI TIẾP NGAY</span>
-                  </button>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => startGame(gameMode)}
-                      className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Chơi Lại Trận Mới</span>
+                      <span className="hidden sm:inline truncate" style={{ color: w.color }}>
+                        {w.shortName}
+                      </span>
                     </button>
-                    <button
-                      onClick={() => setActiveTab('leaderboard')}
-                      className="flex-1 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <Trophy className="w-3.5 h-3.5" />
-                      <span>Xem Bảng Xếp Hạng</span>
-                    </button>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1554,8 +1936,13 @@ export const RoadmapArcadeModal: React.FC<RoadmapArcadeModalProps> = ({
             </div>
 
             {/* Bottom Controls Notice */}
-            <div className="pt-2 text-[11px] text-slate-400 bg-slate-900/60 p-3 rounded-2xl border border-slate-800/80">
-              💡 <strong>Bí quyết sinh tồn:</strong> Nhặt <span className="text-pink-400 font-bold">Trái Tim (+1 Mạng)</span>, <span className="text-cyan-400 font-bold">Laser 3 Tia</span> và kích hoạt <span className="text-amber-400 font-bold">Bom (Phím B)</span> khi cạm bẫy xuất hiện dày đặc!
+            <div className="pt-2 text-[11px] text-slate-400 bg-slate-900/60 p-3 rounded-2xl border border-slate-800/80 space-y-1">
+              <div>
+                💡 <strong>Mỗi trận bắt đầu với 3 Mạng:</strong> Nhặt <span className="text-pink-400 font-bold">Trái Tim (+1 Mạng)</span>, <span className="text-amber-400 font-bold">Bom (Phím B)</span> và các hòm vũ khí rơi xuống!
+              </div>
+              <div>
+                🎮 <strong>Phím nóng vũ khí:</strong> Bấm phím <span className="text-amber-300 font-mono font-bold">1..6</span> để chuyển đổi nhanh giữa 6 loại đạn tối tân!
+              </div>
             </div>
           </div>
 
